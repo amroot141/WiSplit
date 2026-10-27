@@ -44,6 +44,27 @@ class GroupListNotifier extends StateNotifier<List<GroupModel>> {
     await _repository.deleteGroup(groupId);
     state = state.where((g) => g.id != groupId).toList();
   }
+
+  Future<void> addMemberToGroup(String groupId, String newMemberName) async {
+    final trimmed = newMemberName.trim();
+    if (trimmed.isEmpty) return;
+
+    final groupIndex = state.indexWhere((g) => g.id == groupId);
+    if (groupIndex == -1) return;
+
+    final group = state[groupIndex];
+    if (group.members.any((m) => m.toLowerCase() == trimmed.toLowerCase())) {
+      return;
+    }
+
+    final updatedMembers = [...group.members, trimmed];
+    final updatedGroup = group.copyWith(members: updatedMembers);
+
+    await _repository.saveGroup(updatedGroup);
+    final updatedList = List<GroupModel>.from(state);
+    updatedList[groupIndex] = updatedGroup;
+    state = updatedList;
+  }
 }
 
 final groupListProvider =

@@ -7,12 +7,14 @@ import '../../data/models/expense_models.dart';
 import '../providers/expense_provider.dart';
 
 /// Shows a bottom sheet to record a direct payment between two group members.
+/// Shows a bottom sheet to record or edit a direct payment between two group members.
 /// e.g., "A paid B ₹300"
 Future<void> showRecordPaymentBottomSheet(
   BuildContext context, {
   required String groupId,
   required String currentUserId,
   required List<String> groupMemberIds,
+  Expense? existingPayment,
 }) {
   return showModalBottomSheet(
     context: context,
@@ -26,6 +28,7 @@ Future<void> showRecordPaymentBottomSheet(
       groupId: groupId,
       currentUserId: currentUserId,
       groupMemberIds: groupMemberIds,
+      existingPayment: existingPayment,
     ),
   );
 }
@@ -34,12 +37,14 @@ class RecordPaymentContent extends ConsumerStatefulWidget {
   final String groupId;
   final String currentUserId;
   final List<String> groupMemberIds;
+  final Expense? existingPayment;
 
   const RecordPaymentContent({
     super.key,
     required this.groupId,
     required this.currentUserId,
     required this.groupMemberIds,
+    this.existingPayment,
   });
 
   @override
@@ -58,13 +63,30 @@ class _RecordPaymentContentState extends ConsumerState<RecordPaymentContent> {
   @override
   void initState() {
     super.initState();
-    _fromUser = widget.currentUserId;
-    _toUser = widget.groupMemberIds.firstWhere(
-      (m) => m != widget.currentUserId,
-      orElse: () => widget.currentUserId,
-    );
-    _paymentDate = DateTime.now();
-    _paymentTime = TimeOfDay.now();
+    final p = widget.existingPayment;
+    if (p != null) {
+      _amountController.text = p.amount.toStringAsFixed(2);
+      _fromUser = p.paidBy;
+      _toUser = p.splits.isNotEmpty
+          ? p.splits.first.userId
+          : widget.groupMemberIds.firstWhere((m) => m != p.paidBy, orElse: () => p.paidBy);
+      _paymentDate = p.createdAt;
+      _paymentTime = TimeOfDay.fromDateTime(p.createdAt);
+
+      // Extract note from description e.g. "Payment: A → B (Dinner note)"
+      final noteMatch = RegExp(r'\((.*?)\)').firstMatch(p.description);
+      if (noteMatch != null) {
+        _noteController.text = noteMatch.group(1) ?? '';
+      }
+    } else {
+      _fromUser = widget.currentUserId;
+      _toUser = widget.groupMemberIds.firstWhere(
+        (m) => m != widget.currentUserId,
+        orElse: () => widget.currentUserId,
+      );
+      _paymentDate = DateTime.now();
+      _paymentTime = TimeOfDay.now();
+    }
   }
 
   @override
@@ -107,7 +129,10 @@ class _RecordPaymentContentState extends ConsumerState<RecordPaymentContent> {
                 children: [
                   Row(
                     children: [
-                      Text('Record Payment', style: AppTypography.titleSm),
+                      Text(
+                        widget.existingPayment != null ? 'Edit Payment' : 'Record Payment',
+                        style: AppTypography.titleSm,
+                      ),
                       const SizedBox(width: 8),
                       Container(
                         width: 6,
@@ -364,7 +389,7 @@ class _RecordPaymentContentState extends ConsumerState<RecordPaymentContent> {
                           width: 22,
                           child: CircularProgressIndicator(strokeWidth: 2.5),
                         )
-                      : const Text('Confirm Payment'),
+                      : Text(widget.existingPayment != null ? 'Save Changes' : 'Confirm Payment'),
                 ),
               ),
               const SizedBox(height: 24),
@@ -461,7 +486,11 @@ class _RecordPaymentContentState extends ConsumerState<RecordPaymentContent> {
     );
 
     final notifier = ref.read(groupExpenseNotifierProvider(widget.groupId).notifier);
-    await notifier.addExpense(request);
+    if (widget.existingPayment != null) {
+      await notifier.updateExpense(widget.existingPayment!.id, request);
+    } else {
+      await notifier.addExpense(request);
+    }
 
     setState(() => _isSubmitting = false);
 
@@ -469,7 +498,11 @@ class _RecordPaymentContentState extends ConsumerState<RecordPaymentContent> {
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Payment of ₹${amount.toStringAsFixed(2)} from $fromDisplay to $toDisplay recorded!'),
+          content: Text(
+            widget.existingPayment != null
+                ? 'Payment updated successfully!'
+                : 'Payment of ₹${amount.toStringAsFixed(2)} from $fromDisplay to $toDisplay recorded!',
+          ),
         ),
       );
     }

@@ -17,6 +17,12 @@ abstract class PersonalLedgerRepository {
   });
   Future<PersonalLedgerEntry> settleDebt(String entryId);
   Future<PersonalLedgerEntry> cancelDebt(String entryId);
+  Future<PersonalLedgerEntry> updateDebt({
+    required String entryId,
+    required double amount,
+    required String description,
+  });
+  Future<void> deleteDebt(String entryId);
   Future<List<PersonalLedgerEntry>> getCachedEntries({String? userId});
   Future<void> refreshFromRemote(String userId);
 }
@@ -240,5 +246,44 @@ class PersonalLedgerRepositoryImpl implements PersonalLedgerRepository {
       );
     }
     await batch.commit(noResult: true);
+  }
+
+  @override
+  Future<PersonalLedgerEntry> updateDebt({
+    required String entryId,
+    required double amount,
+    required String description,
+  }) async {
+    final now = DateTime.now().toUtc();
+    final db = await _localDb.database;
+
+    await db.update(
+      'cached_personal_ledger',
+      {
+        'amount': amount,
+        'description': description,
+        'updated_at': now.toIso8601String(),
+        'is_synced': 1,
+      },
+      where: 'id = ?',
+      whereArgs: [entryId],
+    );
+
+    final updatedMap = (await db.query(
+      'cached_personal_ledger',
+      where: 'id = ?',
+      whereArgs: [entryId],
+    )).first;
+    return PersonalLedgerEntry.fromSqliteMap(updatedMap);
+  }
+
+  @override
+  Future<void> deleteDebt(String entryId) async {
+    final db = await _localDb.database;
+    await db.delete(
+      'cached_personal_ledger',
+      where: 'id = ?',
+      whereArgs: [entryId],
+    );
   }
 }

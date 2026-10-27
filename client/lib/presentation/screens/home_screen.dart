@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/update_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../data/models/group_model.dart';
@@ -83,6 +84,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       ref.read(allExpensesProvider.notifier).loadAllExpenses();
       ref.read(personalLedgerProvider.notifier).loadLedger();
       ref.read(groupListProvider.notifier).loadGroups();
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      UpdateService.checkForUpdatesSilently(context);
     });
   }
 

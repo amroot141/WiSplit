@@ -11,6 +11,7 @@ Future<void> showAddExpenseBottomSheet(
   required String groupId,
   required String currentUserId,
   required List<String> groupMemberIds,
+  Expense? existingExpense,
 }) {
   return showModalBottomSheet(
     context: context,
@@ -24,6 +25,7 @@ Future<void> showAddExpenseBottomSheet(
       groupId: groupId,
       currentUserId: currentUserId,
       groupMemberIds: groupMemberIds,
+      existingExpense: existingExpense,
     ),
   );
 }
@@ -32,12 +34,14 @@ class AddExpenseBottomSheetContent extends ConsumerStatefulWidget {
   final String groupId;
   final String currentUserId;
   final List<String> groupMemberIds;
+  final Expense? existingExpense;
 
   const AddExpenseBottomSheetContent({
     super.key,
     required this.groupId,
     required this.currentUserId,
     required this.groupMemberIds,
+    this.existingExpense,
   });
 
   @override
@@ -67,19 +71,36 @@ class _AddExpenseBottomSheetContentState
   @override
   void initState() {
     super.initState();
-    _paidBy = widget.currentUserId;
     _allMembers = widget.groupMemberIds.isNotEmpty
         ? widget.groupMemberIds
         : [widget.currentUserId];
-    _selectedParticipants = _allMembers.toSet();
-    _expenseDate = DateTime.now();
-    _expenseTime = TimeOfDay.now();
+
+    final exp = widget.existingExpense;
+    if (exp != null) {
+      _amountController.text = exp.amount.toStringAsFixed(2);
+      _descController.text = exp.description;
+      _paidBy = exp.paidBy;
+      _splitType = exp.splitType;
+      _expenseDate = exp.createdAt;
+      _expenseTime = TimeOfDay.fromDateTime(exp.createdAt);
+      _selectedParticipants = exp.splits.map((s) => s.userId).toSet();
+    } else {
+      _paidBy = widget.currentUserId;
+      _selectedParticipants = _allMembers.toSet();
+      _expenseDate = DateTime.now();
+      _expenseTime = TimeOfDay.now();
+    }
 
     // Initialize custom split values
     for (final member in _allMembers) {
-      _exactControllers[member] = TextEditingController();
-      _percentageControllers[member] = TextEditingController();
-      _shares[member] = 1;
+      final split = exp?.splits.where((s) => s.userId == member).firstOrNull;
+      _exactControllers[member] = TextEditingController(
+        text: split != null && split.amount > 0 ? split.amount.toStringAsFixed(2) : '',
+      );
+      _percentageControllers[member] = TextEditingController(
+        text: split?.percentage != null ? split!.percentage!.toStringAsFixed(1) : '',
+      );
+      _shares[member] = split?.shares?.toInt() ?? 1;
     }
   }
 
@@ -131,7 +152,10 @@ class _AddExpenseBottomSheetContentState
                 children: [
                   Row(
                     children: [
-                      Text('Record Split', style: AppTypography.titleSm),
+                      Text(
+                        widget.existingExpense != null ? 'Edit Expense' : 'Record Split',
+                        style: AppTypography.titleSm,
+                      ),
                       const SizedBox(width: 8),
                       Container(
                         width: 6,
@@ -524,7 +548,7 @@ class _AddExpenseBottomSheetContentState
                         width: 22,
                         child: CircularProgressIndicator(strokeWidth: 2.5),
                       )
-                    : const Text('Confirm & Save Split'),
+                    : Text(widget.existingExpense != null ? 'Save Changes' : 'Confirm & Save Split'),
               ),
             ),
             const SizedBox(height: 24),
@@ -642,7 +666,12 @@ class _AddExpenseBottomSheetContentState
     );
 
     final notifier = ref.read(groupExpenseNotifierProvider(widget.groupId).notifier);
-    final result = await notifier.addExpense(request);
+    Expense? result;
+    if (widget.existingExpense != null) {
+      result = await notifier.updateExpense(widget.existingExpense!.id, request);
+    } else {
+      result = await notifier.addExpense(request);
+    }
 
     setState(() => _isSubmitting = false);
 
@@ -651,7 +680,9 @@ class _AddExpenseBottomSheetContentState
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            result != null ? 'Expense recorded!' : 'Expense saved locally (offline queued)',
+            widget.existingExpense != null
+                ? 'Expense updated successfully!'
+                : (result != null ? 'Expense recorded!' : 'Expense saved locally (offline queued)'),
           ),
         ),
       );

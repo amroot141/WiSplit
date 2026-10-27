@@ -126,6 +126,24 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
     }
   }
 
+  /// Updates an existing expense and refreshes all expenses feed
+  Future<Expense?> updateExpense(String expenseId, CreateExpenseRequest request) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      final updated = await _repository.updateExpense(_groupId, expenseId, request);
+      final updatedList = state.expenses.map((e) => e.id == expenseId ? updated : e).toList();
+      state = state.copyWith(expenses: updatedList, isLoading: false);
+      _ref?.read(allExpensesProvider.notifier).loadAllExpenses();
+      return updated;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to update expense: ${e.toString()}',
+      );
+      return null;
+    }
+  }
+
   /// Deletes an expense from local storage and syncs deletion
   Future<void> deleteExpense(String expenseId) async {
     state = state.copyWith(isLoading: true, errorMessage: null);

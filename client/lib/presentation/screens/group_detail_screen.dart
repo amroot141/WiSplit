@@ -36,6 +36,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final groupState = ref.watch(groupExpenseNotifierProvider(widget.group.id));
+    final groupList = ref.watch(groupListProvider);
+    final activeGroup = groupList.firstWhere(
+      (g) => g.id == widget.group.id,
+      orElse: () => widget.group,
+    );
 
     // Calculate total expenses for this group in INR
     final totalSpent = groupState.expenses.fold<double>(
@@ -43,8 +48,8 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       (sum, e) => sum + e.amount,
     );
 
-    final members = widget.group.members.isNotEmpty
-        ? widget.group.members
+    final members = activeGroup.members.isNotEmpty
+        ? activeGroup.members
         : [widget.currentUserId];
 
     // Calculate offline debt simplification (who owes whom)
@@ -63,13 +68,19 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
     final myShare = mySummary?.totalShare ?? 0.0;
     final myNet = mySummary?.netBalance ?? 0.0;
 
-    final inviteCode = 'WS-${widget.group.id.length >= 6 ? widget.group.id.substring(0, 6).toUpperCase() : widget.group.id.toUpperCase()}';
+    final inviteCode = 'WS-${activeGroup.id.length >= 6 ? activeGroup.id.substring(0, 6).toUpperCase() : activeGroup.id.toUpperCase()}';
 
     return Scaffold(
       backgroundColor: AppColors.surface,
       appBar: AppBar(
-        title: Text(widget.group.name, style: AppTypography.titleSm),
+        title: Text(activeGroup.name, style: AppTypography.titleSm),
         actions: [
+          // Add Member to Group
+          IconButton(
+            icon: const Icon(Icons.person_add_outlined, color: AppColors.primaryContainer),
+            tooltip: 'Add Member',
+            onPressed: () => _showAddMemberDialog(context, activeGroup),
+          ),
           // Import from CSV / XLS
           IconButton(
             icon: const Icon(Icons.file_upload_outlined, color: AppColors.primaryContainer),
@@ -185,17 +196,27 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                   ),
                   const SizedBox(height: 12),
 
-                  // View Member Breakdown Button
-                  Align(
-                    alignment: Alignment.centerRight,
-                    child: TextButton.icon(
-                      onPressed: () => _showMemberBreakdownModal(context, memberBreakdown),
-                      icon: const Icon(Icons.pie_chart_outline, size: 16, color: AppColors.primaryContainer),
-                      label: Text(
-                        'View All Member Balances',
-                        style: AppTypography.labelMd.copyWith(color: AppColors.primaryContainer),
+                  // View Member Breakdown & Add Member Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => _showAddMemberDialog(context, activeGroup),
+                        icon: const Icon(Icons.person_add_outlined, size: 16, color: AppColors.primaryContainer),
+                        label: Text(
+                          'Add Member',
+                          style: AppTypography.labelMd.copyWith(color: AppColors.primaryContainer),
+                        ),
                       ),
-                    ),
+                      TextButton.icon(
+                        onPressed: () => _showMemberBreakdownModal(context, memberBreakdown),
+                        icon: const Icon(Icons.pie_chart_outline, size: 16, color: AppColors.primaryContainer),
+                        label: Text(
+                          'View Member Balances',
+                          style: AppTypography.labelMd.copyWith(color: AppColors.primaryContainer),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -511,6 +532,11 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                               ),
                             ),
                             const SizedBox(width: 4),
+                            IconButton(
+                              icon: const Icon(Icons.edit_outlined, size: 18, color: AppColors.primaryContainer),
+                              tooltip: 'Edit Expense',
+                              onPressed: () => _openEditExpense(context, exp, members),
+                            ),
                             IconButton(
                               icon: const Icon(Icons.delete_outline, size: 18, color: AppColors.outline),
                               tooltip: 'Delete Expense',
@@ -850,19 +876,26 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          isMe ? '${m.userId} (You)' : m.userId,
-                          style: AppTypography.bodyLg.copyWith(fontWeight: FontWeight.w600),
-                        ),
-                        Text(
-                          'Paid: ₹${m.totalPaid.toStringAsFixed(2)} • Share: ₹${m.totalShare.toStringAsFixed(2)}',
-                          style: AppTypography.labelSm.copyWith(color: AppColors.outline),
-                        ),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isMe ? '${m.userId} (You)' : m.userId,
+                            style: AppTypography.bodyLg.copyWith(fontWeight: FontWeight.w600),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            'Paid: ₹${m.totalPaid.toStringAsFixed(2)} • Share: ₹${m.totalShare.toStringAsFixed(2)}',
+                            style: AppTypography.labelSm.copyWith(color: AppColors.outline),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
+                    const SizedBox(width: 8),
                     Text(
                       m.netBalance >= 0
                           ? '+₹${m.netBalance.toStringAsFixed(2)}'
@@ -881,6 +914,92 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         ),
       ),
     );
+  }
+
+  // ── Add Member Dialog ───────────────────────────────────────────────────
+  void _showAddMemberDialog(BuildContext context, GroupModel group) {
+    final controller = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surfaceContainerLow,
+        title: const Text('Add Member to Group'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Enter the name of the new member to add to "${group.name}":',
+              style: AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.words,
+              decoration: const InputDecoration(
+                labelText: 'Member Name',
+                hintText: 'e.g., Alice, Rahul, Bob',
+                prefixIcon: Icon(Icons.person_outline),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final name = controller.text.trim();
+              if (name.isEmpty) return;
+              if (group.members.any((m) => m.toLowerCase() == name.toLowerCase())) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('"$name" is already a member of this group.')),
+                );
+                return;
+              }
+              Navigator.of(ctx).pop();
+              await ref.read(groupListProvider.notifier).addMemberToGroup(group.id, name);
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Added "$name" to "${group.name}"')),
+                );
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primaryContainer,
+              foregroundColor: AppColors.onPrimaryFixed,
+            ),
+            child: const Text('Add'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── Edit Expense / Payment ────────────────────────────────────────────────
+  void _openEditExpense(BuildContext context, Expense exp, List<String> members) {
+    final isPayment = exp.description.startsWith('Payment:') || exp.description.toLowerCase() == 'payment';
+
+    if (isPayment) {
+      showRecordPaymentBottomSheet(
+        context,
+        groupId: exp.groupId,
+        currentUserId: widget.currentUserId,
+        groupMemberIds: members,
+        existingPayment: exp,
+      );
+    } else {
+      showAddExpenseBottomSheet(
+        context,
+        groupId: exp.groupId,
+        currentUserId: widget.currentUserId,
+        groupMemberIds: members,
+        existingExpense: exp,
+      );
+    }
   }
 
   void _confirmDeleteExpense(BuildContext context, Expense exp) {

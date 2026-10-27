@@ -1,7 +1,7 @@
 name: wisplit_client
 description: "Core Flutter client for WiSplit expense splitting, debt simplification, and offline-first personal ledger."
 publish_to: "none"
-version: 1.0.0+1
+version: 1.0.9+9
 
 environment:
   sdk: ">=3.0.0 <4.0.0"

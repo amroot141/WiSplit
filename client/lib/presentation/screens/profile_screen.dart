@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/hardware/back_tap_channel.dart';
 import '../../core/services/import_service.dart';
+import '../../core/services/update_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../data/models/group_model.dart';
@@ -480,12 +481,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               child: Column(
                 children: [
+                  _buildActionTile(
+                    icon: Icons.system_update_rounded,
+                    label: 'Check for Updates',
+                    subtitle: 'Current: v${UpdateService.currentAppVersion} · Tap to check GitHub',
+                    onTap: () => UpdateService.checkAndPrompt(context),
+                    isFirst: true,
+                  ),
+                  Divider(height: 1, indent: 56, color: AppColors.outlineVariant.withValues(alpha: 0.4)),
                   _buildLinkTile(
                     icon: Icons.code,
                     label: 'GitHub Repository',
                     subtitle: 'github.com/amroot141/WiSplit',
                     url: 'https://github.com/amroot141/WiSplit',
-                    isFirst: true,
+                    isFirst: false,
                   ),
                   Divider(height: 1, indent: 56, color: AppColors.outlineVariant.withValues(alpha: 0.4)),
                   _buildLinkTile(
@@ -509,7 +518,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             const SizedBox(height: 12),
             Center(
               child: Text(
-                'WiSplit v1.0.0 · Open Source · MIT License',
+                'WiSplit v${UpdateService.currentAppVersion} · Open Source · MIT License',
                 style: AppTypography.labelSm.copyWith(color: AppColors.outline),
               ),
             ),
@@ -905,6 +914,52 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
     }
+  }
+
+  Widget _buildActionTile({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required VoidCallback onTap,
+    bool isFirst = false,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.vertical(
+        top: isFirst ? const Radius.circular(20) : Radius.zero,
+        bottom: const Radius.circular(0),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppColors.primaryContainer, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w600)),
+                  Text(
+                    subtitle,
+                    style: AppTypography.labelSm.copyWith(color: AppColors.outline),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, size: 20, color: AppColors.outline),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildLinkTile({

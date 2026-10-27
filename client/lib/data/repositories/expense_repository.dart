@@ -17,6 +17,7 @@ abstract class ExpenseRepository {
   Future<List<Expense>> getAllCachedExpenses();
   Future<List<DebtSettlement>> getSimplifiedDebts(String groupId, {String currency = 'USD'});
   Future<void> syncPendingExpenses();
+  Future<Expense> updateExpense(String groupId, String expenseId, CreateExpenseRequest request);
   Future<void> deleteExpense(String expenseId, String groupId);
 }
 
@@ -231,6 +232,60 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     );
 
     AuthService().syncAccountDataToCloud();
+  }
+
+  @override
+  Future<Expense> updateExpense(
+    String groupId,
+    String expenseId,
+    CreateExpenseRequest request,
+  ) async {
+    final db = await _localDb.database;
+    final expenseTimestamp = request.createdAt?.toUtc() ?? DateTime.now().toUtc();
+    final splits = request.splits.map((s) {
+      return ExpenseSplit(
+        id: _uuid.v4(),
+        expenseId: expenseId,
+        userId: s.userId,
+        amount: s.amount ?? (request.amount / request.splits.length),
+        percentage: s.percentage,
+        shares: s.shares,
+        createdAt: expenseTimestamp,
+      );
+    }).toList();
+
+    final updatedExpense = Expense(
+      id: expenseId,
+      groupId: groupId,
+      paidBy: request.paidBy,
+      amount: request.amount,
+      currency: request.currency,
+      description: request.description,
+      splitType: request.splitType,
+      createdAt: expenseTimestamp,
+      splits: splits,
+      isSynced: true,
+    );
+
+    await db.update(
+      'cached_expenses',
+      {
+        'paid_by': updatedExpense.paidBy,
+        'amount': updatedExpense.amount,
+        'currency': updatedExpense.currency,
+        'description': updatedExpense.description,
+        'split_type': updatedExpense.splitType.toJson(),
+        'created_at': updatedExpense.createdAt.toIso8601String(),
+        'splits_json': jsonEncode(updatedExpense.splits.map((s) => s.toJson()).toList()),
+        'is_synced': 1,
+      },
+      where: 'id = ?',
+      whereArgs: [expenseId],
+    );
+
+    AuthService().syncAccountDataToCloud();
+
+    return updatedExpense;
   }
 
   Future<void> _cacheExpense(Expense expense, {required bool isSynced}) async {

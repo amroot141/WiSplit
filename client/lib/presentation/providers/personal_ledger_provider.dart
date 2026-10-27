@@ -153,9 +153,7 @@ class PersonalLedgerNotifier extends StateNotifier<PersonalLedgerState> {
     }
   }
 
-  /// Processes offline queue and synchronizes with Supabase
   Future<void> syncOfflineQueue() async {
-    state = state.copyWith(isLoading: true);
     try {
       await _syncQueue.processQueue();
       await loadLedger();
@@ -164,6 +162,44 @@ class PersonalLedgerNotifier extends StateNotifier<PersonalLedgerState> {
         isLoading: false,
         errorMessage: 'Sync failed: ${e.toString()}',
       );
+    }
+  }
+
+  /// Edits an existing personal ledger debt amount and description
+  Future<bool> updateDebt({
+    required String entryId,
+    required double amount,
+    required String description,
+  }) async {
+    try {
+      final updatedEntry = await _repository.updateDebt(
+        entryId: entryId,
+        amount: amount,
+        description: description,
+      );
+
+      final updatedEntries = state.entries.map((e) {
+        return e.id == entryId ? updatedEntry : e;
+      }).toList();
+
+      state = state.copyWith(entries: updatedEntries, errorMessage: null);
+      return true;
+    } catch (e) {
+      state = state.copyWith(errorMessage: 'Error updating debt: ${e.toString()}');
+      return false;
+    }
+  }
+
+  /// Deletes a personal ledger debt entry
+  Future<bool> deleteDebt(String entryId) async {
+    try {
+      await _repository.deleteDebt(entryId);
+      final updatedEntries = state.entries.where((e) => e.id != entryId).toList();
+      state = state.copyWith(entries: updatedEntries, errorMessage: null);
+      return true;
+    } catch (e) {
+      state = state.copyWith(errorMessage: 'Error deleting debt: ${e.toString()}');
+      return false;
     }
   }
 }

@@ -165,63 +165,183 @@ class BalancesScreen extends ConsumerWidget {
                 final otherParty = isCreditor ? entry.debtorId : entry.creditorId;
                 final isSettled = entry.status == LedgerStatus.SETTLED;
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: AppColors.surfaceContainerHigh,
+                return Material(
+                  color: Colors.transparent,
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    onTap: () => _showEditDebtModal(context, ref, entry),
+                    child: Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                      decoration: BoxDecoration(
+                        color: AppColors.surfaceContainerHigh,
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Row(
                         children: [
-                          Text(
-                            otherParty,
-                            style: AppTypography.bodyLg.copyWith(
-                              fontWeight: FontWeight.w500,
-                              decoration: isSettled ? TextDecoration.lineThrough : null,
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  otherParty,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.bodyLg.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    decoration: isSettled ? TextDecoration.lineThrough : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${entry.description.isNotEmpty ? entry.description : "Debt"} • ${entry.status.name}',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: AppTypography.labelMd.copyWith(
+                                    color: isSettled ? AppColors.outline : AppColors.primaryContainer,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${entry.description} • ${entry.status.name}',
-                            style: AppTypography.labelMd.copyWith(
-                              color: isSettled ? AppColors.outline : AppColors.primaryContainer,
-                            ),
+                          const SizedBox(width: 8),
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                isCreditor
+                                    ? '+₹${entry.amount.toStringAsFixed(2)}'
+                                    : '-₹${entry.amount.toStringAsFixed(2)}',
+                                style: AppTypography.titleSm.copyWith(
+                                  color: isCreditor ? AppColors.primaryContainer : AppColors.pureWhite,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              if (!isSettled)
+                                IconButton(
+                                  constraints: const BoxConstraints(),
+                                  padding: const EdgeInsets.all(4),
+                                  onPressed: () {
+                                    ref.read(personalLedgerProvider.notifier).settleDebt(entry.id);
+                                  },
+                                  icon: const Icon(Icons.check_circle_outline, color: AppColors.primaryContainer, size: 22),
+                                  tooltip: 'Settle Debt',
+                                )
+                              else
+                                const Padding(
+                                  padding: EdgeInsets.symmetric(horizontal: 4),
+                                  child: Icon(Icons.done_all, color: AppColors.outline, size: 18),
+                                ),
+                            ],
                           ),
                         ],
                       ),
-                      Row(
-                        children: [
-                          Text(
-                            isCreditor
-                                ? '+₹${entry.amount.toStringAsFixed(2)}'
-                                : '-₹${entry.amount.toStringAsFixed(2)}',
-                            style: AppTypography.titleSm.copyWith(
-                              color: isCreditor ? AppColors.primaryContainer : AppColors.pureWhite,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          if (!isSettled) ...[
-                            const SizedBox(width: 8),
-                            IconButton(
-                              onPressed: () {
-                                ref.read(personalLedgerProvider.notifier).settleDebt(entry.id);
-                              },
-                              icon: const Icon(Icons.check_circle_outline, color: AppColors.primaryContainer, size: 22),
-                              tooltip: 'Settle Debt',
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
+                    ),
                   ),
                 );
               }),
             const SizedBox(height: 32),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEditDebtModal(BuildContext context, WidgetRef ref, PersonalLedgerEntry entry) {
+    final amountController = TextEditingController(text: entry.amount.toStringAsFixed(2));
+    final descController = TextEditingController(text: entry.description);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surfaceContainerLow,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(
+          left: 20,
+          right: 20,
+          top: 20,
+          bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppColors.outlineVariant,
+                  borderRadius: BorderRadius.circular(9999),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('Edit Personal Debt', style: AppTypography.titleSm),
+                IconButton(
+                  icon: const Icon(Icons.delete_outline, color: AppColors.error),
+                  tooltip: 'Delete Debt',
+                  onPressed: () async {
+                    Navigator.of(ctx).pop();
+                    await ref.read(personalLedgerProvider.notifier).deleteDebt(entry.id);
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(content: Text('Debt entry deleted')),
+                      );
+                    }
+                  },
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: amountController,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(
+                labelText: 'Amount (₹)',
+                prefixText: '₹ ',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: descController,
+              decoration: const InputDecoration(
+                labelText: 'Description / Note',
+                border: OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () async {
+                final newAmount = double.tryParse(amountController.text.trim()) ?? entry.amount;
+                final newDesc = descController.text.trim();
+                Navigator.of(ctx).pop();
+                await ref.read(personalLedgerProvider.notifier).updateDebt(
+                  entryId: entry.id,
+                  amount: newAmount,
+                  description: newDesc,
+                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('Debt updated successfully')),
+                  );
+                }
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primaryContainer,
+                foregroundColor: AppColors.onPrimaryFixed,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+              ),
+              child: const Text('Save Changes', style: TextStyle(fontWeight: FontWeight.w600)),
+            ),
           ],
         ),
       ),

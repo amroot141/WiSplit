@@ -5,6 +5,9 @@ import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../data/models/expense_models.dart';
 import '../providers/expense_provider.dart';
+import '../providers/group_list_provider.dart';
+import '../widgets/add_expense_bottom_sheet.dart';
+import '../widgets/record_payment_bottom_sheet.dart';
 
 class ExpenseDetailsScreen extends ConsumerWidget {
   final Expense expense;
@@ -40,6 +43,11 @@ class ExpenseDetailsScreen extends ConsumerWidget {
         ),
         title: Text('Expense Details', style: AppTypography.titleSm),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.edit_outlined, color: AppColors.primaryContainer),
+            tooltip: 'Edit Expense',
+            onPressed: () => _openEdit(context, ref),
+          ),
           IconButton(
             icon: const Icon(Icons.delete_outline, color: AppColors.error),
             tooltip: 'Delete Expense',
@@ -309,5 +317,31 @@ class ExpenseDetailsScreen extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  void _openEdit(BuildContext context, WidgetRef ref) {
+    final groups = ref.read(groupListProvider);
+    final group = groups.where((g) => g.id == expense.groupId).firstOrNull;
+    final members = group?.members ?? [expense.paidBy, ...expense.splits.map((s) => s.userId)];
+
+    final isPayment = expense.description.startsWith('Payment:') || expense.description.toLowerCase() == 'payment';
+
+    if (isPayment) {
+      showRecordPaymentBottomSheet(
+        context,
+        groupId: expense.groupId,
+        currentUserId: currentUserId,
+        groupMemberIds: members,
+        existingPayment: expense,
+      );
+    } else {
+      showAddExpenseBottomSheet(
+        context,
+        groupId: expense.groupId,
+        currentUserId: currentUserId,
+        groupMemberIds: members,
+        existingExpense: expense,
+      );
+    }
   }
 }
