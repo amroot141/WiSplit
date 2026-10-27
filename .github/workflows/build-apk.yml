@@ -42,7 +42,7 @@ jobs:
       - name: Build Release APK
         run: |
           cd client
-          flutter build apk --release
+          flutter build apk --release --target-platform android-arm,android-arm64,android-x64
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
