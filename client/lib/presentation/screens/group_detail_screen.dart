@@ -252,7 +252,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     icon: const Icon(Icons.share, size: 18, color: AppColors.primaryContainer),
                     tooltip: 'Share Invite Link',
                     onPressed: () {
-                      final shareText = 'Join my group "${widget.group.name}" on WiSplit: https://wisplit.app/join/$inviteCode (Invite Code: $inviteCode)';
+                      final shareText = 'Join my group "${widget.group.name}" on WiSplit! Use Invite Code: $inviteCode. Download the app at https://github.com/amroot141/WiSplit/releases/latest';
                       Clipboard.setData(ClipboardData(text: shareText));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Group invite link copied to clipboard!')),

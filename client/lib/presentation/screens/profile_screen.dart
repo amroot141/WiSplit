@@ -325,7 +325,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       onPressed: () {
                         Clipboard.setData(
                           const ClipboardData(
-                            text: 'Split expenses effortlessly with WiSplit: Minimalist offline-first fintech app in INR. Download at https://wisplit.app',
+                            text: 'Split expenses effortlessly with WiSplit: Minimalist offline-first fintech app in INR. Download at https://github.com/amroot141/WiSplit/releases/latest',
                           ),
                         );
                         ScaffoldMessenger.of(context).showSnackBar(
