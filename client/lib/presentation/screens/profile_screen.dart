@@ -886,9 +886,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         final requests = ImportService.toExpenseRequests(rows, group.memberIds);
         final notifier = ref.read(groupExpenseNotifierProvider(group.id).notifier);
 
-        for (final req in requests) {
-          await notifier.addExpense(req);
-        }
+        await notifier.addExpensesBatch(requests);
+        ref.read(allExpensesProvider.notifier).loadAllExpenses();
+        ref.read(groupListProvider.notifier).loadGroups();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

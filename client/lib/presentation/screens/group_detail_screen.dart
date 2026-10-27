@@ -1060,9 +1060,8 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         final requests = ImportService.toExpenseRequests(rows, members);
         final notifier = ref.read(groupExpenseNotifierProvider(widget.group.id).notifier);
 
-        for (final req in requests) {
-          await notifier.addExpense(req);
-        }
+        await notifier.addExpensesBatch(requests);
+        ref.read(allExpensesProvider.notifier).loadAllExpenses();
 
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(

@@ -1,52 +1,20 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/database/local_database.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
+import '../providers/expense_provider.dart';
 import '../providers/personal_ledger_provider.dart';
 import '../providers/sync_provider.dart';
 
-class ActivityScreen extends ConsumerStatefulWidget {
+class ActivityScreen extends ConsumerWidget {
   const ActivityScreen({super.key});
 
   @override
-  ConsumerState<ActivityScreen> createState() => _ActivityScreenState();
-}
-
-class _ActivityScreenState extends ConsumerState<ActivityScreen> {
-  List<Map<String, dynamic>> _groupExpenses = [];
-  bool _isLoadingExpenses = true;
-
-  @override
-  void initState() {
-    super.initState();
-    _loadGroupExpenses();
-  }
-
-  Future<void> _loadGroupExpenses() async {
-    try {
-      final db = await LocalDatabase.instance.database;
-      final rows = await db.query(
-        'cached_expenses',
-        orderBy: 'created_at DESC',
-        limit: 30,
-      );
-      if (mounted) {
-        setState(() {
-          _groupExpenses = rows;
-          _isLoadingExpenses = false;
-        });
-      }
-    } catch (_) {
-      if (mounted) setState(() => _isLoadingExpenses = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final syncStatus = ref.watch(syncStatusProvider);
     final ledgerState = ref.watch(personalLedgerProvider);
+    final allExpenses = ref.watch(allExpensesProvider);
 
     // Combine personal ledger entries and group expenses into real activity items
     final List<Map<String, dynamic>> allActivities = [];
@@ -62,19 +30,13 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
       });
     }
 
-    for (final exp in _groupExpenses) {
-      final amount = (exp['amount'] as num?)?.toDouble() ?? 0.0;
-      final desc = (exp['description'] as String?) ?? 'Group Expense';
-      final paidBy = (exp['paid_by'] as String?) ?? 'Member';
-      final createdAtStr = exp['created_at']?.toString() ?? '';
-      final createdAt = DateTime.tryParse(createdAtStr) ?? DateTime.now();
-
+    for (final exp in allExpenses) {
       allActivities.add({
-        'title': desc,
-        'subtitle': 'Paid by $paidBy • Group Split',
-        'amount': '₹${amount.toStringAsFixed(2)}',
+        'title': exp.description.isNotEmpty ? exp.description : 'Group Expense',
+        'subtitle': 'Paid by ${exp.paidBy} • Group Split',
+        'amount': '₹${exp.amount.toStringAsFixed(2)}',
         'isPositive': false,
-        'date': createdAt,
+        'date': exp.createdAt,
         'icon': Icons.receipt_long,
       });
     }
@@ -95,7 +57,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
             icon: const Icon(Icons.refresh, size: 20),
             onPressed: () {
               ref.read(personalLedgerProvider.notifier).syncOfflineQueue();
-              _loadGroupExpenses();
+              ref.read(allExpensesProvider.notifier).loadAllExpenses();
             },
           ),
         ],
@@ -139,7 +101,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
                   TextButton(
                     onPressed: () async {
                       await ref.read(syncStatusProvider.notifier).triggerSync();
-                      _loadGroupExpenses();
+                      ref.read(allExpensesProvider.notifier).loadAllExpenses();
                     },
                     child: const Text('Sync Now'),
                   ),
@@ -148,7 +110,7 @@ class _ActivityScreenState extends ConsumerState<ActivityScreen> {
           ),
           const SizedBox(height: 24),
 
-          if (allActivities.isEmpty && !_isLoadingExpenses)
+          if (allActivities.isEmpty)
             Padding(
               padding: const EdgeInsets.symmetric(vertical: 48.0),
               child: Center(

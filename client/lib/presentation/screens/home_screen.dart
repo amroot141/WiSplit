@@ -3,11 +3,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
+import '../../data/models/group_model.dart';
+import '../providers/auth_provider.dart';
 import '../providers/expense_provider.dart';
 import '../providers/personal_ledger_provider.dart';
 import '../providers/sync_provider.dart';
 import '../providers/group_list_provider.dart';
 import 'friend_profile_screen.dart';
+import 'group_detail_screen.dart';
 import 'profile_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
@@ -45,9 +48,43 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
+class _RecentItem {
+  final String id;
+  final String title;
+  final String subtitle;
+  final double netImpact;
+  final double totalAmount;
+  final DateTime date;
+  final bool isGroup;
+  final String? groupId;
+  final String? friendId;
+
+  _RecentItem({
+    required this.id,
+    required this.title,
+    required this.subtitle,
+    required this.netImpact,
+    required this.totalAmount,
+    required this.date,
+    required this.isGroup,
+    this.groupId,
+    this.friendId,
+  });
+}
+
 class _HomeScreenState extends ConsumerState<HomeScreen> {
   bool _showToast = false;
   String _toastMessage = 'All balance requests dispatched';
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() {
+      ref.read(allExpensesProvider.notifier).loadAllExpenses();
+      ref.read(personalLedgerProvider.notifier).loadLedger();
+      ref.read(groupListProvider.notifier).loadGroups();
+    });
+  }
 
   void _triggerToast(String message) {
     setState(() {
@@ -62,9 +99,102 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final ledgerState = ref.watch(personalLedgerProvider);
+    final allExpenses = ref.watch(allExpensesProvider);
+    final groups = ref.watch(groupListProvider);
     final syncStatus = ref.watch(syncStatusProvider);
-    final netBalance = ledgerState.netBalance(widget.currentUserId);
-    final isPositive = netBalance >= 0;
+    final session = ref.watch(userSessionProvider).asData?.value;
+
+    bool isCurrentUser(String nameOrId) {
+      final target = nameOrId.trim().toLowerCase();
+      if (target.isEmpty) return false;
+      if (target == widget.currentUserId.toLowerCase()) return true;
+      if (session != null) {
+        if (session.userId.toLowerCase() == target) return true;
+        if (session.fullName.trim().toLowerCase() == target) return true;
+        if (session.email.trim().toLowerCase() == target) return true;
+        final emailPrefix = session.email.split('@').first.toLowerCase();
+        if (emailPrefix == target) return true;
+      }
+      return false;
+    }
+
+    // 1. Personal 1-on-1 direct debts
+    final personalNet = ledgerState.netBalance(widget.currentUserId);
+
+    // 2. Group expenses net balance across all groups
+    double groupNet = 0.0;
+    for (final exp in allExpenses) {
+      final isPayer = isCurrentUser(exp.paidBy);
+      double mySplit = 0.0;
+      if (exp.splits.isNotEmpty) {
+        for (final split in exp.splits) {
+          if (isCurrentUser(split.userId)) {
+            mySplit += split.amount;
+          }
+        }
+      }
+      if (isPayer) {
+        groupNet += (exp.amount - mySplit);
+      } else {
+        groupNet -= mySplit;
+      }
+    }
+
+    final totalNetBalance = personalNet + groupNet;
+    final isPositive = totalNetBalance >= -0.001;
+
+    // 3. Unified recent transactions feed
+    final List<_RecentItem> recentItems = [];
+
+    for (final entry in ledgerState.entries) {
+      final isCreditor = entry.creditorId == widget.currentUserId;
+      final otherParty = isCreditor ? entry.debtorId : entry.creditorId;
+      final impact = isCreditor ? entry.amount : -entry.amount;
+      recentItems.add(
+        _RecentItem(
+          id: entry.id,
+          title: otherParty,
+          subtitle: '${entry.description.isNotEmpty ? entry.description : "Direct debt"} • ${entry.status.name.toLowerCase()}',
+          netImpact: impact,
+          totalAmount: entry.amount,
+          date: entry.createdAt,
+          isGroup: false,
+          friendId: otherParty,
+        ),
+      );
+    }
+
+    for (final exp in allExpenses) {
+      final isPayer = isCurrentUser(exp.paidBy);
+      double mySplit = 0.0;
+      if (exp.splits.isNotEmpty) {
+        for (final split in exp.splits) {
+          if (isCurrentUser(split.userId)) {
+            mySplit += split.amount;
+          }
+        }
+      }
+
+      final impact = isPayer ? (exp.amount - mySplit) : -mySplit;
+      final subtitle = isPayer
+          ? 'You paid ₹${exp.amount.toStringAsFixed(2)}'
+          : '${exp.paidBy} paid ₹${exp.amount.toStringAsFixed(2)}';
+
+      recentItems.add(
+        _RecentItem(
+          id: exp.id,
+          title: exp.description.isNotEmpty ? exp.description : 'Group Expense',
+          subtitle: subtitle,
+          netImpact: impact,
+          totalAmount: exp.amount,
+          date: exp.createdAt,
+          isGroup: true,
+          groupId: exp.groupId,
+        ),
+      );
+    }
+
+    recentItems.sort((a, b) => b.date.compareTo(a.date));
 
     return Scaffold(
       backgroundColor: AppColors.surface,
@@ -138,7 +268,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ),
                     const SizedBox(width: 4),
                     Text(
-                      netBalance.abs().toStringAsFixed(2),
+                      totalNetBalance.abs().toStringAsFixed(2),
                       style: AppTypography.displayHeroMobile.copyWith(
                         color: AppColors.pureWhite,
                         fontWeight: FontWeight.w800,
@@ -155,15 +285,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     Icon(
                       isPositive ? Icons.arrow_upward : Icons.arrow_downward,
                       size: 15,
-                      color: AppColors.primaryContainer,
+                      color: isPositive ? AppColors.primaryContainer : AppColors.error,
                     ),
                     const SizedBox(width: 4),
                     Text(
                       isPositive
-                          ? '+₹${netBalance.toStringAsFixed(2)} this week'
-                          : '-₹${netBalance.abs().toStringAsFixed(2)} balance pending',
+                          ? (totalNetBalance > 0.009
+                              ? '+₹${totalNetBalance.toStringAsFixed(2)} you are owed'
+                              : 'All settled up! ₹0.00')
+                          : '-₹${totalNetBalance.abs().toStringAsFixed(2)} you owe',
                       style: AppTypography.labelMd.copyWith(
-                        color: AppColors.primaryContainer,
+                        color: isPositive ? AppColors.primaryContainer : AppColors.error,
                         fontWeight: FontWeight.w500,
                       ),
                     ),
@@ -216,11 +348,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 const SizedBox(height: 12),
 
                 // ── Dynamic Recent Transactions Feed ────────────────────────
-                if (ledgerState.entries.isEmpty)
+                if (recentItems.isEmpty)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 48.0),
                     child: Text(
-                      'No recent transactions in local queue.\nDouble-tap the back of your phone to add one.',
+                      'No recent transactions in local queue.\nDouble-tap the back of your phone to add one, or import CSV.',
                       textAlign: TextAlign.center,
                       style: AppTypography.bodyMd.copyWith(color: AppColors.outline),
                     ),
@@ -229,26 +361,46 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
-                    itemCount: ledgerState.entries.length,
+                    itemCount: recentItems.length > 25 ? 25 : recentItems.length,
                     itemBuilder: (context, index) {
-                      final entry = ledgerState.entries[index];
-                      final isCreditor = entry.creditorId == widget.currentUserId;
-                      final otherParty = isCreditor ? entry.debtorId : entry.creditorId;
-                      final initials = otherParty.isNotEmpty
-                          ? otherParty.substring(0, otherParty.length >= 2 ? 2 : 1).toUpperCase()
-                          : 'FR';
+                      final item = recentItems[index];
+                      final initials = item.title.isNotEmpty
+                          ? item.title.substring(0, item.title.length >= 2 ? 2 : 1).toUpperCase()
+                          : 'TX';
 
                       return InkWell(
                         onTap: () {
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => FriendProfileScreen(
-                                friendName: otherParty,
-                                currentUserId: widget.currentUserId,
-                                friendUserId: otherParty,
+                          if (item.isGroup && item.groupId != null) {
+                            final matchedGroup = groups.firstWhere(
+                              (g) => g.id == item.groupId,
+                              orElse: () => GroupModel(
+                                id: item.groupId!,
+                                name: 'Group',
+                                description: '',
+                                createdBy: '',
+                                members: [],
+                                createdAt: DateTime.now(),
                               ),
-                            ),
-                          );
+                            );
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => GroupDetailScreen(
+                                  group: matchedGroup,
+                                  currentUserId: widget.currentUserId,
+                                ),
+                              ),
+                            );
+                          } else if (item.friendId != null) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => FriendProfileScreen(
+                                  friendName: item.friendId!,
+                                  currentUserId: widget.currentUserId,
+                                  friendUserId: item.friendId!,
+                                ),
+                              ),
+                            );
+                          }
                         },
                         borderRadius: BorderRadius.circular(12),
                         child: Padding(
@@ -256,55 +408,82 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 44,
-                                    height: 44,
-                                    decoration: const BoxDecoration(
-                                      color: AppColors.surfaceContainerHigh,
-                                      shape: BoxShape.circle,
+                              Expanded(
+                                child: Row(
+                                  children: [
+                                    Container(
+                                      width: 44,
+                                      height: 44,
+                                      decoration: BoxDecoration(
+                                        color: item.isGroup
+                                            ? AppColors.primaryContainer.withValues(alpha: 0.15)
+                                            : AppColors.surfaceContainerHigh,
+                                        shape: BoxShape.circle,
+                                      ),
+                                      alignment: Alignment.center,
+                                      child: item.isGroup
+                                          ? const Icon(Icons.receipt_long, color: AppColors.primaryContainer, size: 20)
+                                          : Text(
+                                              initials,
+                                              style: AppTypography.labelMd.copyWith(
+                                                color: AppColors.onSurface,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
                                     ),
-                                    alignment: Alignment.center,
-                                    child: Text(
-                                      initials,
-                                      style: AppTypography.labelMd.copyWith(
-                                        color: AppColors.onSurface,
-                                        fontWeight: FontWeight.w600,
+                                    const SizedBox(width: 14),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            item.title,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTypography.bodyLg.copyWith(
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            item.subtitle,
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: AppTypography.labelMd.copyWith(
+                                              color: AppColors.outline,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        otherParty,
-                                        style: AppTypography.bodyLg.copyWith(
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        '${entry.description} • ${entry.status.name.toLowerCase()}',
-                                        style: AppTypography.labelMd.copyWith(
-                                          color: AppColors.outline,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                isCreditor
-                                    ? '+₹${entry.amount.toStringAsFixed(2)}'
-                                    : '-₹${entry.amount.toStringAsFixed(2)}',
-                                style: AppTypography.titleSm.copyWith(
-                                  color: isCreditor
-                                      ? AppColors.primaryContainer
-                                      : AppColors.pureWhite,
-                                  fontWeight: FontWeight.w600,
+                                  ],
                                 ),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    item.netImpact >= 0
+                                        ? '+₹${item.netImpact.toStringAsFixed(2)}'
+                                        : '-₹${item.netImpact.abs().toStringAsFixed(2)}',
+                                    style: AppTypography.titleSm.copyWith(
+                                      color: item.netImpact >= 0
+                                          ? AppColors.primaryContainer
+                                          : AppColors.error,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  if (item.isGroup)
+                                    Text(
+                                      'Total ₹${item.totalAmount.toStringAsFixed(2)}',
+                                      style: AppTypography.labelSm.copyWith(
+                                        color: AppColors.outline,
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                ],
                               ),
                             ],
                           ),

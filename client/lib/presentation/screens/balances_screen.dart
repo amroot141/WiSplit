@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
 import '../../data/models/personal_ledger_model.dart';
+import '../providers/auth_provider.dart';
+import '../providers/expense_provider.dart';
 import '../providers/personal_ledger_provider.dart';
 import '../widgets/quick_ledger_dialog.dart';
 
@@ -18,8 +20,47 @@ class BalancesScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final ledgerState = ref.watch(personalLedgerProvider);
-    final totalOwedToMe = ledgerState.totalOwedToMe(currentUserId);
-    final totalIOwe = ledgerState.totalIOwe(currentUserId);
+    final allExpenses = ref.watch(allExpensesProvider);
+    final session = ref.watch(userSessionProvider).asData?.value;
+
+    bool isCurrentUser(String nameOrId) {
+      final target = nameOrId.trim().toLowerCase();
+      if (target.isEmpty) return false;
+      if (target == currentUserId.toLowerCase()) return true;
+      if (session != null) {
+        if (session.userId.toLowerCase() == target) return true;
+        if (session.fullName.trim().toLowerCase() == target) return true;
+        if (session.email.trim().toLowerCase() == target) return true;
+        final emailPrefix = session.email.split('@').first.toLowerCase();
+        if (emailPrefix == target) return true;
+      }
+      return false;
+    }
+
+    double groupOwedToMe = 0.0;
+    double groupIOwe = 0.0;
+
+    for (final exp in allExpenses) {
+      final isPayer = isCurrentUser(exp.paidBy);
+      double mySplit = 0.0;
+      if (exp.splits.isNotEmpty) {
+        for (final split in exp.splits) {
+          if (isCurrentUser(split.userId)) {
+            mySplit += split.amount;
+          }
+        }
+      }
+
+      if (isPayer) {
+        final lent = exp.amount - mySplit;
+        if (lent > 0) groupOwedToMe += lent;
+      } else {
+        if (mySplit > 0) groupIOwe += mySplit;
+      }
+    }
+
+    final totalOwedToMe = ledgerState.totalOwedToMe(currentUserId) + groupOwedToMe;
+    final totalIOwe = ledgerState.totalIOwe(currentUserId) + groupIOwe;
 
     return Scaffold(
       appBar: AppBar(

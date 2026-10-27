@@ -11,7 +11,9 @@ import '../services/expense_api_service.dart';
 
 abstract class ExpenseRepository {
   Future<Expense> createExpense(String groupId, CreateExpenseRequest request);
+  Future<List<Expense>> createExpensesBatch(String groupId, List<CreateExpenseRequest> requests);
   Future<List<Expense>> getCachedGroupExpenses(String groupId);
+  Future<List<Expense>> getAllCachedExpenses();
   Future<List<DebtSettlement>> getSimplifiedDebts(String groupId, {String currency = 'USD'});
   Future<void> syncPendingExpenses();
   Future<void> deleteExpense(String expenseId, String groupId);
@@ -88,6 +90,109 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     );
 
     return offlineExpense;
+  }
+
+  @override
+  Future<List<Expense>> createExpensesBatch(
+    String groupId,
+    List<CreateExpenseRequest> requests,
+  ) async {
+    final db = await _localDb.database;
+    final createdList = <Expense>[];
+
+    await db.transaction((txn) async {
+      for (final request in requests) {
+        final tempId = 'temp_${_uuid.v4()}';
+        final expenseTimestamp = request.createdAt?.toUtc() ?? DateTime.now().toUtc();
+        final splits = request.splits.map((s) {
+          return ExpenseSplit(
+            id: _uuid.v4(),
+            expenseId: tempId,
+            userId: s.userId,
+            amount: s.amount ?? (request.amount / request.splits.length),
+            percentage: s.percentage,
+            shares: s.shares,
+            createdAt: expenseTimestamp,
+          );
+        }).toList();
+
+        final offlineExpense = Expense(
+          id: tempId,
+          groupId: groupId,
+          paidBy: request.paidBy,
+          amount: request.amount,
+          currency: request.currency,
+          description: request.description,
+          splitType: request.splitType,
+          createdAt: expenseTimestamp,
+          splits: splits,
+          isSynced: false,
+        );
+
+        await txn.insert(
+          'cached_expenses',
+          {
+            'id': offlineExpense.id,
+            'group_id': offlineExpense.groupId,
+            'paid_by': offlineExpense.paidBy,
+            'amount': offlineExpense.amount,
+            'currency': offlineExpense.currency,
+            'description': offlineExpense.description,
+            'split_type': offlineExpense.splitType.toJson(),
+            'created_at': offlineExpense.createdAt.toIso8601String(),
+            'splits_json': jsonEncode(offlineExpense.splits.map((s) => s.toJson()).toList()),
+            'is_synced': 0,
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+
+        await txn.insert(
+          'sync_queue',
+          {
+            'temp_id': tempId,
+            'item_type': SyncItemType.EXPENSE,
+            'action': SyncAction.CREATE,
+            'endpoint': '/groups/$groupId/expenses',
+            'payload_json': jsonEncode(request.toJson()),
+            'created_at': DateTime.now().toIso8601String(),
+            'retry_count': 0,
+            'status': 'PENDING',
+          },
+        );
+
+        createdList.add(offlineExpense);
+      }
+    });
+
+    return createdList;
+  }
+
+  @override
+  Future<List<Expense>> getAllCachedExpenses() async {
+    final db = await _localDb.database;
+    final rows = await db.query(
+      'cached_expenses',
+      orderBy: 'created_at DESC',
+    );
+
+    return rows.map((r) {
+      final splitsList = (jsonDecode(r['splits_json'] as String) as List)
+          .map((s) => ExpenseSplit.fromJson(s as Map<String, dynamic>))
+          .toList();
+
+      return Expense(
+        id: r['id'] as String,
+        groupId: r['group_id'] as String,
+        paidBy: r['paid_by'] as String,
+        amount: (r['amount'] as num).toDouble(),
+        currency: r['currency'] as String,
+        description: r['description'] as String,
+        splitType: SplitType.fromJson(r['split_type'] as String),
+        createdAt: DateTime.parse(r['created_at'] as String),
+        splits: splitsList,
+        isSynced: (r['is_synced'] as int) == 1,
+      );
+    }).toList();
   }
 
   @override

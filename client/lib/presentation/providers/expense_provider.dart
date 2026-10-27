@@ -42,15 +42,16 @@ final groupExpenseNotifierProvider =
     StateNotifierProvider.family<GroupExpenseNotifier, GroupExpensesState, String>(
   (ref, groupId) {
     final repository = ref.watch(expenseRepositoryProvider);
-    return GroupExpenseNotifier(repository, groupId);
+    return GroupExpenseNotifier(repository, groupId, ref);
   },
 );
 
 class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
   final ExpenseRepository _repository;
   final String _groupId;
+  final Ref? _ref;
 
-  GroupExpenseNotifier(this._repository, this._groupId)
+  GroupExpenseNotifier(this._repository, this._groupId, [this._ref])
       : super(const GroupExpensesState()) {
     loadCachedExpenses();
   }
@@ -76,6 +77,7 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
       final created = await _repository.createExpense(_groupId, request);
       final updatedList = [created, ...state.expenses];
       state = state.copyWith(expenses: updatedList, isLoading: false);
+      _ref?.read(allExpensesProvider.notifier).loadAllExpenses();
       return created;
     } catch (e) {
       state = state.copyWith(
@@ -103,6 +105,27 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
     }
   }
 
+  /// Batch creates multiple expenses in one atomic SQLite transaction
+  Future<List<Expense>> addExpensesBatch(List<CreateExpenseRequest> requests) async {
+    state = state.copyWith(isLoading: true, errorMessage: null);
+    try {
+      final created = await _repository.createExpensesBatch(_groupId, requests);
+      final cached = await _repository.getCachedGroupExpenses(_groupId);
+      state = state.copyWith(
+        expenses: cached,
+        isLoading: false,
+      );
+      _ref?.read(allExpensesProvider.notifier).loadAllExpenses();
+      return created;
+    } catch (e) {
+      state = state.copyWith(
+        isLoading: false,
+        errorMessage: 'Failed to batch import expenses: ${e.toString()}',
+      );
+      return [];
+    }
+  }
+
   /// Deletes an expense from local storage and syncs deletion
   Future<void> deleteExpense(String expenseId) async {
     state = state.copyWith(isLoading: true, errorMessage: null);
@@ -110,6 +133,7 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
       await _repository.deleteExpense(expenseId, _groupId);
       final updatedList = state.expenses.where((e) => e.id != expenseId).toList();
       state = state.copyWith(expenses: updatedList, isLoading: false);
+      _ref?.read(allExpensesProvider.notifier).loadAllExpenses();
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
@@ -118,3 +142,22 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
     }
   }
 }
+
+class AllExpensesNotifier extends StateNotifier<List<Expense>> {
+  final ExpenseRepository _repository;
+
+  AllExpensesNotifier(this._repository) : super([]) {
+    loadAllExpenses();
+  }
+
+  Future<void> loadAllExpenses() async {
+    final expenses = await _repository.getAllCachedExpenses();
+    state = expenses;
+  }
+}
+
+final allExpensesProvider =
+    StateNotifierProvider<AllExpensesNotifier, List<Expense>>((ref) {
+  final repository = ref.watch(expenseRepositoryProvider);
+  return AllExpensesNotifier(repository);
+});
