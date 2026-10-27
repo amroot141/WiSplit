@@ -12,9 +12,19 @@ import 'presentation/screens/groups_screen.dart';
 import 'presentation/screens/home_screen.dart';
 import 'presentation/widgets/quick_ledger_dialog.dart';
 
+import 'dart:async';
+
 void main() {
-  WidgetsFlutterBinding.ensureInitialized();
-  runApp(const ProviderScope(child: WiSplitApp()));
+  runZonedGuarded(() {
+    WidgetsFlutterBinding.ensureInitialized();
+    FlutterError.onError = (FlutterErrorDetails details) {
+      FlutterError.presentError(details);
+      debugPrint('WiSplit FlutterError: ${details.exception}');
+    };
+    runApp(const ProviderScope(child: WiSplitApp()));
+  }, (error, stackTrace) {
+    debugPrint('WiSplit Unhandled Error: $error\n$stackTrace');
+  });
 }
 
 class WiSplitApp extends ConsumerStatefulWidget {
@@ -32,15 +42,19 @@ class _WiSplitAppState extends ConsumerState<WiSplitApp> {
     super.initState();
 
     // Native Android hardware gesture MethodChannel listener
-    BackTapChannel.initialize(
-      onTrigger: () {
-        final ctx = rootNavigatorKey.currentContext;
-        final session = ref.read(userSessionProvider).value;
-        if (ctx != null && session != null) {
-          HomeScreen.showQuickAddModal(ctx, currentUserId: session.userId);
-        }
-      },
-    );
+    try {
+      BackTapChannel.initialize(
+        onTrigger: () {
+          final ctx = rootNavigatorKey.currentContext;
+          final session = ref.read(userSessionProvider).value;
+          if (ctx != null && session != null) {
+            HomeScreen.showQuickAddModal(ctx, currentUserId: session.userId);
+          }
+        },
+      );
+    } catch (e) {
+      debugPrint('BackTapChannel initialization skipped: $e');
+    }
   }
 
   @override
