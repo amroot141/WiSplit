@@ -7,13 +7,13 @@
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web-black)](https://github.com/amroot141/WiSplit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Release](https://img.shields.io/badge/Download_APK-v1.0.0-BFA2FA?style=for-the-badge&logo=android&logoColor=black)](https://github.com/amroot141/WiSplit/raw/main/WiSplit-release.apk)
+[![Latest Release](https://img.shields.io/github/v/release/amroot141/WiSplit?style=for-the-badge&logo=android&logoColor=black&color=BFA2FA&label=Download%20APK)](https://github.com/amroot141/WiSplit/releases/latest/download/app-release.apk)
 
 <p align="center">
   <b>A distraction-free, pure OLED fintech ledger engineered for effortless expense sharing, minimum cash flow debt simplification, and offline-first reliability. Built strictly in Indian Rupees (₹).</b>
 </p>
 
-[📲 **Download Latest Release APK**](https://github.com/amroot141/WiSplit/raw/main/WiSplit-release.apk) • [📦 **GitHub Releases**](https://github.com/amroot141/WiSplit/releases) • [📖 **Architecture**](#-system-architecture) • [🚀 **Getting Started**](#-getting-started)
+[📲 **Download Latest Release APK**](https://github.com/amroot141/WiSplit/releases/latest/download/app-release.apk) • [📦 **All Releases**](https://github.com/amroot141/WiSplit/releases) • [📖 **Architecture**](#-system-architecture) • [🚀 **Getting Started**](#-getting-started)
 
 </div>
 
@@ -21,10 +21,10 @@
 
 ## 📥 Download & Installation
 
-You can download and install the Android build directly:
+Always get the latest build directly from GitHub Releases:
 
-### 👉 [Download WiSplit Release APK (v1.0.0)](https://github.com/amroot141/WiSplit/raw/main/WiSplit-release.apk)
-*(File size: ~63.6 MB • Target: Android 8.0+ / API 26+)*
+### 👉 [📲 Download Latest WiSplit Release APK (Direct Download)](https://github.com/amroot141/WiSplit/releases/latest/download/app-release.apk)
+*(Auto-updates to the newest release • Target: Android 8.0+ / API 26+)*
 
 > [!NOTE]
 > **Installing on Android (Play Protect Notice)**:
