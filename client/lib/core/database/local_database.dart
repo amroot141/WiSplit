@@ -20,13 +20,15 @@ class LocalDatabase {
 
     return await openDatabase(
       path,
-      version: 2,
+      version: 3,
       onCreate: _createDB,
       onUpgrade: (db, oldVersion, newVersion) async {
         await _createAdditionalTables(db);
+        await _migrateSchema(db);
       },
       onOpen: (db) async {
         await _createAdditionalTables(db);
+        await _migrateSchema(db);
       },
     );
   }
@@ -111,9 +113,18 @@ class LocalDatabase {
         access_token TEXT,
         refresh_token TEXT,
         currency TEXT NOT NULL DEFAULT 'USD',
-        is_logged_in INTEGER NOT NULL DEFAULT 1
+        is_logged_in INTEGER NOT NULL DEFAULT 1,
+        avatar_url TEXT
       )
     ''');
+  }
+
+  Future<void> _migrateSchema(Database db) async {
+    try {
+      await db.execute('ALTER TABLE user_session ADD COLUMN avatar_url TEXT');
+    } catch (_) {
+      // Column already exists or table was just created with avatar_url
+    }
   }
 
   Future<void> close() async {

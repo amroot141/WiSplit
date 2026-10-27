@@ -16,8 +16,8 @@ class UserSessionNotifier extends StateNotifier<AsyncValue<UserSession?>> {
     try {
       final session = await _authService.getActiveSession();
       state = AsyncValue.data(session);
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+    } catch (_) {
+      state = const AsyncValue.data(null);
     }
   }
 
@@ -45,13 +45,11 @@ class UserSessionNotifier extends StateNotifier<AsyncValue<UserSession?>> {
     required String email,
     required String password,
   }) async {
-    state = const AsyncValue.loading();
     try {
       final session = await _authService.signIn(email: email, password: password);
       state = AsyncValue.data(session);
       return session;
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+    } catch (_) {
       rethrow;
     }
   }
@@ -60,25 +58,21 @@ class UserSessionNotifier extends StateNotifier<AsyncValue<UserSession?>> {
     required String email,
     required String token,
   }) async {
-    state = const AsyncValue.loading();
     try {
       final session = await _authService.verifyOtp(email: email, token: token);
       state = AsyncValue.data(session);
       return session;
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+    } catch (_) {
       rethrow;
     }
   }
 
   Future<UserSession> continueAsGuest({String name = 'User'}) async {
-    state = const AsyncValue.loading();
     try {
       final session = await _authService.continueAsGuest(name: name);
       state = AsyncValue.data(session);
       return session;
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
+    } catch (_) {
       rethrow;
     }
   }
