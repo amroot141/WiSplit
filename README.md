@@ -7,13 +7,13 @@
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
 [![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web-black)](https://github.com/amroot141/WiSplit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/amroot141/WiSplit?style=for-the-badge&logo=android&logoColor=black&color=BFA2FA&label=Download%20APK)](https://github.com/amroot141/WiSplit/releases/latest/download/app-release.apk)
+[![Latest Release](https://img.shields.io/github/v/release/amroot141/WiSplit?style=for-the-badge&logo=android&logoColor=black&color=BFA2FA&label=Download%20APK)](https://github.com/amroot141/WiSplit/releases/latest/download/WiSplit-release.apk)
 
 <p align="center">
   <b>A distraction-free, pure OLED fintech ledger engineered for effortless expense sharing, minimum cash flow debt simplification, and offline-first reliability. Built strictly in Indian Rupees (₹).</b>
 </p>
 
-[📲 **Download Latest Release APK**](https://github.com/amroot141/WiSplit/releases/latest/download/app-release.apk) • [📦 **All Releases**](https://github.com/amroot141/WiSplit/releases) • [📖 **Architecture**](#-system-architecture) • [🚀 **Getting Started**](#-getting-started)
+[📲 **Download Latest Release APK (v1.0.9)**](https://github.com/amroot141/WiSplit/releases/latest/download/WiSplit-release.apk) • [📦 **All Releases**](https://github.com/amroot141/WiSplit/releases) • [📖 **Architecture**](#-system-architecture) • [🚀 **Getting Started**](#-getting-started)
 
 </div>
 
@@ -23,7 +23,7 @@
 
 Always get the latest build directly from GitHub Releases:
 
-### 👉 [📲 Download Latest WiSplit Release APK (Direct Download)](https://github.com/amroot141/WiSplit/releases/latest/download/app-release.apk)
+### 👉 [📲 Download Latest WiSplit Release APK (v1.0.9 Direct Download)](https://github.com/amroot141/WiSplit/releases/latest/download/WiSplit-release.apk)
 *(Auto-updates to the newest release • Target: Android 8.0+ / API 26+)*
 
 > [!NOTE]
@@ -31,6 +31,17 @@ Always get the latest build directly from GitHub Releases:
 > Because this is a self-signed release build not distributed via the Google Play Store, Android Play Protect will display a prompt during installation.
 > 1. Tap **"More details"** (or disable Play Protect in Google Play settings).
 > 2. Tap **"Install anyway"** to complete the installation.
+
+---
+
+## 🆕 What's New in v1.0.9
+
+- 👥 **Add Members Post-Creation**: Easily add new friends or roommates to any group at any time directly from the AppBar actions or the spending card.
+- ✏️ **Edit Expenses & Payments**: Full in-place editing of expenses, group settlements, and personal ledger debts with instant balance recalculations.
+- 🔄 **In-App Automatic Updates**: WiSplit automatically checks GitHub Releases on startup and lets you download updates seamlessly with changelog details.
+- 🗂️ **Cloud Account Backup & Restore**: Automatic account sync ensures groups and personal ledgers persist across device switches or reinstalls.
+- 📊 **Enhanced Batch CSV/Excel Import**: Multi-currency symbol detection (`₹`, `Rs.`, `$`, `INR`), negative amount handling, and instant homepage net-balance calculation.
+- 📱 **Anti-Overflow Defensive Layout**: Clean, responsive cards that gracefully handle long descriptions, notes, and member names.
 
 ---
 
