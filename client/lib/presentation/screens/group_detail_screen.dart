@@ -988,6 +988,8 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       }
 
       final totalSum = rows.fold<double>(0.0, (sum, r) => sum + r.amount);
+      final paymentCount = rows.where((r) => r.isPayment).length;
+      final expenseCount = rows.length - paymentCount;
 
       if (!mounted) return;
 
@@ -1000,7 +1002,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             children: [
               const Icon(Icons.file_upload_outlined, color: AppColors.primaryContainer),
               const SizedBox(width: 10),
-              Text('Import Expenses', style: AppTypography.titleSm),
+              Text('Import Records', style: AppTypography.titleSm),
             ],
           ),
           content: Column(
@@ -1008,12 +1010,23 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Found ${rows.length} expense(s) in "${file.name}"',
+                'Found ${rows.length} record(s) in "${file.name}":',
                 style: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
+              if (expenseCount > 0)
+                Text(
+                  '• $expenseCount Expense(s)',
+                  style: AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+                ),
+              if (paymentCount > 0)
+                Text(
+                  '• $paymentCount Payment(s)',
+                  style: AppTypography.bodyMd.copyWith(color: AppColors.primaryContainer, fontWeight: FontWeight.w600),
+                ),
+              const SizedBox(height: 8),
               Text(
-                'Total Amount: ₹${totalSum.toStringAsFixed(2)}',
+                'Total Volume: ₹${totalSum.toStringAsFixed(2)}',
                 style: AppTypography.bodyLg.copyWith(
                   color: AppColors.primaryContainer,
                   fontWeight: FontWeight.w700,
@@ -1021,7 +1034,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Expenses will be attributed to group members and balances recalculated automatically.',
+                'Expenses and payments will be allocated to group members and balances recalculated automatically.',
                 style: AppTypography.labelMd.copyWith(color: AppColors.outline),
               ),
             ],
@@ -1054,7 +1067,7 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Successfully imported ${requests.length} expenses into ${widget.group.name}!'),
+              content: Text('Imported $expenseCount expense(s) and $paymentCount payment(s) into ${widget.group.name}!'),
             ),
           );
         }

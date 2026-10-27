@@ -12,6 +12,7 @@ class ImportedExpenseRow {
   final String splitType;
   final DateTime? date;
   final List<String> participants;
+  final bool isPayment;
 
   const ImportedExpenseRow({
     required this.description,
@@ -20,6 +21,7 @@ class ImportedExpenseRow {
     this.splitType = 'EQUAL',
     this.date,
     this.participants = const [],
+    this.isPayment = false,
   });
 }
 
@@ -85,63 +87,104 @@ class ImportService {
     final result = <ImportedExpenseRow>[];
     if (rows.isEmpty) return result;
 
-    int startIdx = 0;
+    int headerIdx = -1;
     // Identify header row
     for (int i = 0; i < rows.length; i++) {
       final lineJoined = rows[i].join(' ').toLowerCase();
       if (lineJoined.contains('description') ||
           lineJoined.contains('amount') ||
           lineJoined.contains('paid') ||
-          lineJoined.contains('spend')) {
-        startIdx = i + 1;
+          lineJoined.contains('spend') ||
+          lineJoined.contains('payment')) {
+        headerIdx = i;
         break;
       }
     }
+
+    // Column indices mapping
+    int dateIdx = 0;
+    int descIdx = 1;
+    int paidByIdx = 2;
+    int amountIdx = 3;
+    int splitIdx = 4;
+    int participantsIdx = 5;
+    int typeIdx = -1;
+
+    if (headerIdx != -1) {
+      final headerCols = rows[headerIdx];
+      int foundDate = -1;
+      int foundDesc = -1;
+      int foundPaid = -1;
+      int foundAmt = -1;
+      int foundSplit = -1;
+      int foundParts = -1;
+      int foundType = -1;
+
+      for (int c = 0; c < headerCols.length; c++) {
+        final colName = headerCols[c].trim().toLowerCase();
+        if (colName.contains('date') || colName.contains('time')) {
+          foundDate = c;
+        } else if (colName == 'type' || colName.contains('category') || colName.contains('kind')) {
+          foundType = c;
+        } else if (colName.contains('description') || colName.contains('desc') || colName.contains('note') || colName.contains('title')) {
+          foundDesc = c;
+        } else if (colName.contains('paid by') || colName.contains('payer') || colName.contains('who paid') || colName == 'paid') {
+          foundPaid = c;
+        } else if (colName.contains('amount') || colName.contains('inr') || colName.contains('cost') || colName.contains('total') || colName.contains('price')) {
+          foundAmt = c;
+        } else if (colName.contains('split') || colName.contains('method')) {
+          foundSplit = c;
+        } else if (colName.contains('participant') || colName.contains('member') || colName.contains('shared') || colName.contains('with') || colName == 'to' || colName == 'paid to') {
+          foundParts = c;
+        }
+      }
+
+      if (foundDesc != -1) descIdx = foundDesc;
+      if (foundPaid != -1) paidByIdx = foundPaid;
+      if (foundAmt != -1) amountIdx = foundAmt;
+      if (foundDate != -1) dateIdx = foundDate;
+      if (foundSplit != -1) splitIdx = foundSplit;
+      if (foundParts != -1) participantsIdx = foundParts;
+      if (foundType != -1) typeIdx = foundType;
+    }
+
+    final startIdx = headerIdx != -1 ? headerIdx + 1 : 0;
 
     for (int i = startIdx; i < rows.length; i++) {
       final cols = rows[i];
       if (cols.length < 3) continue;
 
       try {
-        DateTime? date;
-        String description;
-        String paidBy;
-        double amount;
-        String splitType = 'EQUAL';
+        DateTime? date = (dateIdx >= 0 && dateIdx < cols.length) ? _parseDate(cols[dateIdx]) : null;
+        String description = (descIdx >= 0 && descIdx < cols.length) ? cols[descIdx].trim() : '';
+        String paidBy = (paidByIdx >= 0 && paidByIdx < cols.length) ? cols[paidByIdx].trim() : '';
+        double amount = (amountIdx >= 0 && amountIdx < cols.length) ? _parseAmount(cols[amountIdx]) : 0.0;
+        String splitType = (splitIdx >= 0 && splitIdx < cols.length && cols[splitIdx].trim().isNotEmpty)
+            ? cols[splitIdx].trim().toUpperCase()
+            : 'EQUAL';
+        String typeVal = (typeIdx >= 0 && typeIdx < cols.length) ? cols[typeIdx].trim().toLowerCase() : '';
         List<String> participants = [];
-
-        if (cols.length >= 4) {
-          // Format: Date, Description, PaidBy, Amount, [SplitMethod], [Participants]
-          date = _parseDate(cols[0]);
-          description = cols[1].trim();
-          paidBy = cols[2].trim();
-          amount = _parseAmount(cols[3]);
-          if (cols.length >= 5 && cols[4].trim().isNotEmpty) {
-            splitType = cols[4].trim().toUpperCase();
-          }
-          if (cols.length >= 6 && cols[5].trim().isNotEmpty) {
-            participants = cols[5]
-                .split(RegExp(r'[;,]'))
-                .map((e) => e.trim())
-                .where((e) => e.isNotEmpty)
-                .toList();
-          }
-        } else {
-          // Minimal format: Description, PaidBy, Amount
-          description = cols[0].trim();
-          paidBy = cols[1].trim();
-          amount = _parseAmount(cols[2]);
+        if (participantsIdx >= 0 && participantsIdx < cols.length && cols[participantsIdx].trim().isNotEmpty) {
+          participants = cols[participantsIdx]
+              .split(RegExp(r'[;,]'))
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
         }
 
-        if (amount <= 0 || description.isEmpty || paidBy.isEmpty) continue;
+        if (amount <= 0 || (description.isEmpty && typeVal.isEmpty) || paidBy.isEmpty) continue;
+
+        // Detect if row is a Payment or an Expense
+        final isPayment = _detectIsPayment(description: description, splitType: splitType, typeValue: typeVal);
 
         result.add(ImportedExpenseRow(
-          description: description,
+          description: description.isNotEmpty ? description : (isPayment ? 'Payment' : 'Expense'),
           amount: amount,
           paidBy: paidBy,
           splitType: splitType.isNotEmpty ? splitType : 'EQUAL',
           date: date,
           participants: participants,
+          isPayment: isPayment,
         ));
       } catch (_) {
         continue;
@@ -168,82 +211,71 @@ class ImportService {
     final lines = const LineSplitter().convert(rawContent);
     if (lines.isEmpty) return rows;
 
-    // Skip header row and comment lines
-    int startIdx = 0;
-    for (int i = 0; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.isEmpty || line.startsWith('#') || line.startsWith('//')) continue;
-      final lower = line.toLowerCase();
-      if (lower.contains('description') || lower.contains('amount') || lower.contains('paid')) {
-        startIdx = i + 1;
-        break;
-      }
-      startIdx = i;
-      break;
+    final table = <List<String>>[];
+    for (final line in lines) {
+      final trimmed = line.trim();
+      if (trimmed.isEmpty || trimmed.startsWith('#') || trimmed.startsWith('//')) continue;
+      table.add(_splitCsvLine(trimmed, delimiter));
     }
 
-    for (int i = startIdx; i < lines.length; i++) {
-      final line = lines[i].trim();
-      if (line.isEmpty || line.startsWith('#')) continue;
-
-      final cols = _splitCsvLine(line, delimiter);
-      if (cols.length < 3) continue;
-
-      try {
-        DateTime? date;
-        String description;
-        String paidBy;
-        double amount;
-        String splitType = 'EQUAL';
-        List<String> participants = [];
-
-        if (cols.length >= 4) {
-          date = _parseDate(cols[0].trim());
-          description = cols[1].trim();
-          paidBy = cols[2].trim();
-          amount = _parseAmount(cols[3].trim());
-          if (cols.length >= 5) splitType = cols[4].trim().toUpperCase();
-          if (cols.length >= 6) {
-            participants = cols[5]
-                .trim()
-                .split(';')
-                .map((e) => e.trim())
-                .where((e) => e.isNotEmpty)
-                .toList();
-          }
-        } else {
-          description = cols[0].trim();
-          paidBy = cols[1].trim();
-          amount = _parseAmount(cols[2].trim());
-        }
-
-        if (amount <= 0 || description.isEmpty || paidBy.isEmpty) continue;
-
-        rows.add(ImportedExpenseRow(
-          description: description,
-          amount: amount,
-          paidBy: paidBy,
-          splitType: splitType.isNotEmpty ? splitType : 'EQUAL',
-          date: date,
-          participants: participants,
-        ));
-      } catch (_) {
-        continue;
-      }
-    }
-
-    return rows;
+    return parseTableRows(table);
   }
 
   /// Converts parsed rows into CreateExpenseRequest objects ready for the provider.
+  /// Automatically distinguishes and formats both EXPENSES and PAYMENTS.
   static List<CreateExpenseRequest> toExpenseRequests(
     List<ImportedExpenseRow> rows,
     List<String> groupMembers,
   ) {
     return rows.map((row) {
-      final participants = row.participants.isNotEmpty ? row.participants : groupMembers;
-      final splitType = SplitType.fromJson(row.splitType);
+      final payerResolved = _resolveMember(row.paidBy, groupMembers);
 
+      // ── Payment Row: Record direct payment (e.g. A paid B ₹300) ───────────
+      if (row.isPayment) {
+        // Recipients: non-payers in row participants
+        List<String> recipients = row.participants
+            .map((p) => _resolveMember(p, groupMembers))
+            .where((p) => p.toLowerCase() != payerResolved.toLowerCase())
+            .toList();
+
+        // If participants did not explicitly name the recipient, pick other group member(s)
+        if (recipients.isEmpty) {
+          recipients = groupMembers
+              .where((m) => m.toLowerCase() != payerResolved.toLowerCase())
+              .toList();
+        }
+
+        // Fallback for single-member groups
+        if (recipients.isEmpty && groupMembers.isNotEmpty) {
+          recipients = [groupMembers.first];
+        }
+
+        final toUserDisplay = recipients.isNotEmpty ? recipients.first : 'Member';
+        final desc = (row.description.isEmpty || row.description.toLowerCase() == 'payment')
+            ? 'Payment: $payerResolved → $toUserDisplay'
+            : row.description;
+
+        final share = recipients.isNotEmpty ? (row.amount / recipients.length) : row.amount;
+        final splits = recipients.map((r) => SplitItemInput(userId: r, amount: share)).toList();
+
+        return CreateExpenseRequest(
+          paidBy: payerResolved,
+          amount: row.amount,
+          currency: 'INR',
+          description: desc,
+          splitType: SplitType.EXACT,
+          splits: splits,
+          createdAt: row.date,
+        );
+      }
+
+      // ── Expense Row: Standard group split (EQUAL, EXACT, PERCENTAGE, etc.) ──
+      final rawParticipants = row.participants.isNotEmpty
+          ? row.participants.map((p) => _resolveMember(p, groupMembers)).toList()
+          : groupMembers;
+      final participants = rawParticipants.isNotEmpty ? rawParticipants : [payerResolved];
+
+      final splitType = SplitType.fromJson(row.splitType);
       final splits = participants.map((uid) {
         return SplitItemInput(
           userId: uid,
@@ -252,10 +284,10 @@ class ImportService {
       }).toList();
 
       return CreateExpenseRequest(
-        paidBy: row.paidBy,
+        paidBy: payerResolved,
         amount: row.amount,
         currency: 'INR',
-        description: row.description,
+        description: row.description.isNotEmpty ? row.description : 'Group Expense',
         splitType: splitType,
         splits: splits,
         createdAt: row.date,
@@ -263,16 +295,70 @@ class ImportService {
     }).toList();
   }
 
-  /// Generates a sample CSV template string for download or copy.
+  /// Generates a sample CSV template string showing both Expenses and Payments.
   static String generateTemplate() {
     final buf = StringBuffer();
     buf.writeln('Date,Description,Paid By,Amount (INR),Split Method,Participants');
-    buf.writeln('2026-10-27 19:30:00,Dinner at Bistro,user@email.com,1200.00,EQUAL,user1@email.com;user2@email.com');
-    buf.writeln('2026-10-27 14:15:00,Groceries,user2@email.com,850.50,EQUAL,');
+    buf.writeln('2026-10-27 19:30:00,Dinner at Bistro,Sanwi,1200.00,EQUAL,Amrit;Sanwi');
+    buf.writeln('2026-10-27 20:15:00,Payment,Sanwi,2000.00,PAYMENT,Amrit;Sanwi');
+    buf.writeln('2026-10-27 21:00:00,Groceries,Amrit,850.50,EQUAL,Amrit;Sanwi');
+    buf.writeln('2026-10-27 22:30:00,Payment,Amrit,150.00,PAYMENT,Amrit;Sanwi');
     return buf.toString();
   }
 
   // ── Private Helpers ──────────────────────────────────────────────────────
+
+  static bool _detectIsPayment({
+    required String description,
+    required String splitType,
+    required String typeValue,
+  }) {
+    final lowerType = typeValue.trim().toLowerCase();
+    final lowerDesc = description.trim().toLowerCase();
+    final upperSplit = splitType.trim().toUpperCase();
+
+    // 1. Explicit Type column
+    if (lowerType == 'payment' || lowerType == 'settle' || lowerType == 'settlement' || lowerType == 'transfer') {
+      return true;
+    }
+
+    // 2. Split Method specified as PAYMENT or SETTLE
+    if (upperSplit == 'PAYMENT' || upperSplit == 'SETTLE' || upperSplit == 'SETTLEMENT') {
+      return true;
+    }
+
+    // 3. Description is "Payment" (as in screenshot) or starts with payment / settle
+    if (lowerDesc == 'payment' ||
+        lowerDesc.startsWith('payment ') ||
+        lowerDesc.startsWith('payment:') ||
+        lowerDesc.startsWith('settle') ||
+        lowerDesc.startsWith('paid to ')) {
+      return true;
+    }
+
+    return false;
+  }
+
+  static String _resolveMember(String rawName, List<String> groupMembers) {
+    final trimmed = rawName.trim();
+    if (trimmed.isEmpty) return trimmed;
+
+    // 1. Exact match (case-insensitive)
+    for (final m in groupMembers) {
+      if (m.toLowerCase() == trimmed.toLowerCase()) return m;
+    }
+
+    // 2. Starts with / contains match (e.g. "Amrit" matches "Amritanshu" or "amrit@...")
+    for (final m in groupMembers) {
+      if (m.toLowerCase().startsWith(trimmed.toLowerCase()) ||
+          trimmed.toLowerCase().startsWith(m.toLowerCase())) {
+        return m;
+      }
+    }
+
+    // 3. Fallback to raw string
+    return trimmed;
+  }
 
   static double _parseAmount(String raw) {
     final cleaned = raw.replaceAll(RegExp(r'[₹$,\s]'), '');

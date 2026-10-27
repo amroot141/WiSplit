@@ -765,6 +765,8 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       }
 
       final totalSum = rows.fold<double>(0.0, (sum, r) => sum + r.amount);
+      final paymentCount = rows.where((r) => r.isPayment).length;
+      final expenseCount = rows.length - paymentCount;
 
       if (!mounted) return;
 
@@ -785,12 +787,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Found ${rows.length} expense(s) in "${file.name}"',
+                'Found ${rows.length} record(s) in "${file.name}":',
                 style: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w600),
               ),
-              const SizedBox(height: 6),
+              const SizedBox(height: 8),
+              if (expenseCount > 0)
+                Text(
+                  '• $expenseCount Expense(s)',
+                  style: AppTypography.bodyMd.copyWith(color: AppColors.onSurfaceVariant),
+                ),
+              if (paymentCount > 0)
+                Text(
+                  '• $paymentCount Payment(s)',
+                  style: AppTypography.bodyMd.copyWith(color: AppColors.primaryContainer, fontWeight: FontWeight.w600),
+                ),
+              const SizedBox(height: 8),
               Text(
-                'Total Amount: ₹${totalSum.toStringAsFixed(2)}',
+                'Total Volume: ₹${totalSum.toStringAsFixed(2)}',
                 style: AppTypography.bodyLg.copyWith(
                   color: AppColors.primaryContainer,
                   fontWeight: FontWeight.w700,
@@ -798,7 +811,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                'Importing will record these expenses into "${group.name}" with automatic dates/times.',
+                'Importing will record expenses and direct payments into "${group.name}" with automatic dates/times.',
                 style: AppTypography.labelMd.copyWith(color: AppColors.outline),
               ),
             ],
@@ -831,7 +844,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Successfully imported ${requests.length} expenses into ${group.name}!'),
+              content: Text('Imported $expenseCount expense(s) and $paymentCount payment(s) into ${group.name}!'),
             ),
           );
         }
