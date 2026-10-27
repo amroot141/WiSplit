@@ -56,6 +56,101 @@ class AuthService {
     await db.update('user_session', {'is_logged_in': 0});
   }
 
+  /// Restores cloud backed-up groups and expenses into local SQLite
+  Future<void> restoreCloudBackup(Map<String, dynamic> userMeta) async {
+    try {
+      final db = await LocalDatabase.instance.database;
+
+      // 1. Restore Groups
+      final groupsRaw = userMeta['groups_backup'];
+      if (groupsRaw is List) {
+        for (final item in groupsRaw) {
+          if (item is Map) {
+            final groupMap = Map<String, dynamic>.from(item);
+            await db.insert(
+              'cached_groups',
+              groupMap,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+      }
+
+      // 2. Restore Expenses
+      final expensesRaw = userMeta['expenses_backup'];
+      if (expensesRaw is List) {
+        for (final item in expensesRaw) {
+          if (item is Map) {
+            final expMap = Map<String, dynamic>.from(item);
+            await db.insert(
+              'cached_expenses',
+              expMap,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+      }
+    } catch (_) {}
+  }
+
+  /// Uploads local SQLite snapshot (groups & expenses) to Supabase user_metadata
+  Future<void> syncAccountDataToCloud() async {
+    try {
+      final session = await getActiveSession();
+      if (session == null || session.accessToken == null || session.accessToken!.isEmpty) {
+        return;
+      }
+
+      final db = await LocalDatabase.instance.database;
+      final groups = await db.query('cached_groups');
+      final expenses = await db.query('cached_expenses');
+
+      final uri = Uri.parse('$_supabaseUrl/user');
+      await _httpClient.put(
+        uri,
+        headers: {
+          'apikey': _supabaseAnonKey,
+          'Authorization': 'Bearer ${session.accessToken}',
+          'Content-Type': 'application/json',
+        },
+        body: jsonEncode({
+          'data': {
+            'groups_backup': groups,
+            'expenses_backup': expenses,
+          },
+        }),
+      );
+    } catch (_) {}
+  }
+
+  /// Pulls latest cloud snapshot and restores missing data
+  Future<void> syncAccountDataFromCloud() async {
+    try {
+      final session = await getActiveSession();
+      if (session == null || session.accessToken == null || session.accessToken!.isEmpty) {
+        return;
+      }
+
+      final uri = Uri.parse('$_supabaseUrl/user');
+      final response = await _httpClient.get(
+        uri,
+        headers: {
+          'apikey': _supabaseAnonKey,
+          'Authorization': 'Bearer ${session.accessToken}',
+          'Content-Type': 'application/json',
+        },
+      );
+
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final data = jsonDecode(response.body);
+        final userMeta = data['user_metadata'] as Map<String, dynamic>?;
+        if (userMeta != null) {
+          await restoreCloudBackup(userMeta);
+        }
+      }
+    } catch (_) {}
+  }
+
   /// Real Supabase GoTrue Sign Up
   Future<UserSession> signUp({
     required String email,
@@ -133,6 +228,9 @@ class AuthService {
       );
 
       await saveSession(session);
+      if (userMeta != null) {
+        await restoreCloudBackup(userMeta);
+      }
       return session;
     } else {
       final msg = data['error_description'] ?? data['msg'] ?? data['message'] ?? 'Invalid credentials';
@@ -192,6 +290,9 @@ class AuthService {
       );
 
       await saveSession(session);
+      if (userMeta != null) {
+        await restoreCloudBackup(userMeta);
+      }
       return session;
     } else {
       final msg = data['msg'] ?? data['error_description'] ?? data['message'] ?? 'OTP verification failed';

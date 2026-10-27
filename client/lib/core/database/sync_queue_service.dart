@@ -97,6 +97,11 @@ class SyncQueueService {
     return Sqflite.firstIntValue(result) ?? 0;
   }
 
+  Future<void> clearQueue() async {
+    final db = await _localDb.database;
+    await db.delete('sync_queue');
+  }
+
   Future<void> processQueue() async {
     if (_isSyncing) return;
     final isOnline = await _networkInfo.isConnected;
@@ -136,16 +141,21 @@ class SyncQueueService {
           // Successfully processed: remove from queue
           await db.delete('sync_queue', where: 'id = ?', whereArgs: [item.id]);
         } catch (e) {
-          final nextRetry = item.retryCount + 1;
-          await db.update(
-            'sync_queue',
-            {
-              'retry_count': nextRetry,
-              'status': nextRetry > 5 ? 'FAILED' : 'PENDING',
-            },
-            where: 'id = ?',
-            whereArgs: [item.id],
-          );
+          // If connection failed to obsolete local endpoint, remove so it doesn't block sync
+          if (item.endpoint.startsWith('/groups')) {
+            await db.delete('sync_queue', where: 'id = ?', whereArgs: [item.id]);
+          } else {
+            final nextRetry = item.retryCount + 1;
+            await db.update(
+              'sync_queue',
+              {
+                'retry_count': nextRetry,
+                'status': nextRetry > 2 ? 'FAILED' : 'PENDING',
+              },
+              where: 'id = ?',
+              whereArgs: [item.id],
+            );
+          }
         }
       }
     } finally {

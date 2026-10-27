@@ -1,21 +1,28 @@
 import 'package:sqflite/sqflite.dart';
 
 import '../../core/database/local_database.dart';
-import '../../core/database/sync_queue_service.dart';
 import '../models/group_model.dart';
+import '../services/auth_service.dart';
 
 class GroupRepository {
-  final SyncQueueService _syncQueue;
-
-  GroupRepository({SyncQueueService? syncQueue})
-      : _syncQueue = syncQueue ?? SyncQueueService();
+  GroupRepository();
 
   Future<List<GroupModel>> getAllGroups() async {
     final db = await LocalDatabase.instance.database;
-    final rows = await db.query(
+    var rows = await db.query(
       'cached_groups',
       orderBy: 'created_at DESC',
     );
+
+    // If local groups empty, attempt to restore from account cloud backup
+    if (rows.isEmpty) {
+      await AuthService().syncAccountDataFromCloud();
+      rows = await db.query(
+        'cached_groups',
+        orderBy: 'created_at DESC',
+      );
+    }
+
     return rows.map((r) => GroupModel.fromMap(r)).toList();
   }
 
@@ -41,14 +48,8 @@ class GroupRepository {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
-    // Queue creation for offline-first sync
-    await _syncQueue.enqueue(
-      tempId: group.id,
-      itemType: SyncItemType.GROUP,
-      action: SyncAction.CREATE,
-      endpoint: '/groups',
-      payload: group.toMap(),
-    );
+    // Backup to account cloud storage
+    AuthService().syncAccountDataToCloud();
   }
 
   Future<void> deleteGroup(String groupId) async {
@@ -69,13 +70,7 @@ class GroupRepository {
       );
     });
 
-    // Queue deletion for sync
-    await _syncQueue.enqueue(
-      tempId: groupId,
-      itemType: SyncItemType.GROUP,
-      action: SyncAction.CANCEL,
-      endpoint: '/groups/$groupId',
-      payload: {'id': groupId},
-    );
+    // Backup changes to account cloud storage
+    AuthService().syncAccountDataToCloud();
   }
 }

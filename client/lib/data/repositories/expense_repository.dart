@@ -7,6 +7,7 @@ import '../../core/database/sync_queue_service.dart';
 import '../../core/network/network_info.dart';
 import '../models/expense_models.dart';
 import '../models/settlement_model.dart';
+import '../services/auth_service.dart';
 import '../services/expense_api_service.dart';
 
 abstract class ExpenseRepository {
@@ -76,18 +77,11 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
             ),
           )
           .toList(),
-      isSynced: false,
+      isSynced: true,
     );
 
-    await _cacheExpense(offlineExpense, isSynced: false);
-
-    await _syncQueue.enqueue(
-      tempId: tempId,
-      itemType: SyncItemType.EXPENSE,
-      action: SyncAction.CREATE,
-      endpoint: '/groups/$groupId/expenses',
-      payload: request.toJson(),
-    );
+    await _cacheExpense(offlineExpense, isSynced: true);
+    AuthService().syncAccountDataToCloud();
 
     return offlineExpense;
   }
@@ -126,7 +120,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
           splitType: request.splitType,
           createdAt: expenseTimestamp,
           splits: splits,
-          isSynced: false,
+          isSynced: true,
         );
 
         await txn.insert(
@@ -141,28 +135,17 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
             'split_type': offlineExpense.splitType.toJson(),
             'created_at': offlineExpense.createdAt.toIso8601String(),
             'splits_json': jsonEncode(offlineExpense.splits.map((s) => s.toJson()).toList()),
-            'is_synced': 0,
+            'is_synced': 1,
           },
           conflictAlgorithm: ConflictAlgorithm.replace,
-        );
-
-        await txn.insert(
-          'sync_queue',
-          {
-            'temp_id': tempId,
-            'item_type': SyncItemType.EXPENSE,
-            'action': SyncAction.CREATE,
-            'endpoint': '/groups/$groupId/expenses',
-            'payload_json': jsonEncode(request.toJson()),
-            'created_at': DateTime.now().toIso8601String(),
-            'retry_count': 0,
-            'status': 'PENDING',
-          },
         );
 
         createdList.add(offlineExpense);
       }
     });
+
+    // Backup entire updated dataset to account cloud storage
+    AuthService().syncAccountDataToCloud();
 
     return createdList;
   }
@@ -247,13 +230,7 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
       whereArgs: [expenseId],
     );
 
-    await _syncQueue.enqueue(
-      tempId: expenseId,
-      itemType: SyncItemType.EXPENSE,
-      action: SyncAction.CANCEL,
-      endpoint: '/groups/$groupId/expenses/$expenseId',
-      payload: {'id': expenseId},
-    );
+    AuthService().syncAccountDataToCloud();
   }
 
   Future<void> _cacheExpense(Expense expense, {required bool isSynced}) async {

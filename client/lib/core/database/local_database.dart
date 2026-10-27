@@ -125,6 +125,11 @@ class LocalDatabase {
     } catch (_) {
       // Column already exists or table was just created with avatar_url
     }
+
+    // Clean up stuck sync_queue items that were queued for the dead localhost IP
+    try {
+      await db.delete('sync_queue');
+    } catch (_) {}
   }
 
   Future<void> close() async {

@@ -172,13 +172,22 @@ class ImportService {
               .toList();
         }
 
-        if (amount <= 0 || (description.isEmpty && typeVal.isEmpty) || paidBy.isEmpty) continue;
+        if (amount < 0) {
+          amount = amount.abs();
+        }
+        if (amount == 0) continue;
+        if (description.isEmpty) {
+          description = typeVal.isNotEmpty ? typeVal : 'Expense';
+        }
+        if (paidBy.isEmpty) {
+          paidBy = 'You';
+        }
 
         // Detect if row is a Payment or an Expense
         final isPayment = _detectIsPayment(description: description, splitType: splitType, typeValue: typeVal);
 
         result.add(ImportedExpenseRow(
-          description: description.isNotEmpty ? description : (isPayment ? 'Payment' : 'Expense'),
+          description: description,
           amount: amount,
           paidBy: paidBy,
           splitType: splitType.isNotEmpty ? splitType : 'EQUAL',
@@ -361,7 +370,15 @@ class ImportService {
   }
 
   static double _parseAmount(String raw) {
-    final cleaned = raw.replaceAll(RegExp(r'[₹$,\s]'), '');
+    // Strip currency symbols (₹, $, €, £) and currency words (INR, Rs., Rs, USD, EUR)
+    var cleaned = raw
+        .replaceAll(RegExp(r'(₹|\$|€|£|INR|Rs\.|Rs|USD|EUR)', caseSensitive: false), '')
+        .replaceAll(',', '')
+        .replaceAll(' ', '')
+        .trim();
+    if (cleaned.startsWith('(') && cleaned.endsWith(')')) {
+      cleaned = '-${cleaned.substring(1, cleaned.length - 1)}';
+    }
     return double.tryParse(cleaned) ?? 0.0;
   }
 

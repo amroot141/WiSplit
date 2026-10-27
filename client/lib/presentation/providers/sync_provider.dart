@@ -3,6 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/database/sync_queue_service.dart';
 import '../../core/network/network_info.dart';
+import '../../data/services/auth_service.dart';
+import 'expense_provider.dart';
+import 'group_list_provider.dart';
 import 'personal_ledger_provider.dart';
 
 class SyncStatus {
@@ -92,6 +95,11 @@ class SyncStatusNotifier extends StateNotifier<SyncStatus> {
 
     try {
       await _syncQueue.processQueue();
+
+      // Cloud account synchronization for groups & expenses
+      await AuthService().syncAccountDataToCloud();
+      await AuthService().syncAccountDataFromCloud();
+
       final count = await _syncQueue.getPendingCount();
       state = state.copyWith(
         isSyncing: false,
@@ -99,11 +107,19 @@ class SyncStatusNotifier extends StateNotifier<SyncStatus> {
         lastSyncTime: DateTime.now(),
       );
 
-      // Refresh personal ledger if active
+      // Refresh cached UI providers
+      _ref.read(groupListProvider.notifier).loadGroups();
+      _ref.read(allExpensesProvider.notifier).loadAllExpenses();
       _ref.read(personalLedgerProvider.notifier).loadLedger();
     } catch (_) {
       state = state.copyWith(isSyncing: false);
     }
+  }
+
+  /// Clears any stuck pending queue items
+  Future<void> clearSyncQueue() async {
+    await _syncQueue.clearQueue();
+    state = state.copyWith(pendingCount: 0);
   }
 
   @override

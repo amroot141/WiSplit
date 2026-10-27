@@ -91,5 +91,22 @@ Date,Description,Paid By,Amount (INR),Split Method,Participants
       expect(requests[0].splits[0].userId, 'Amrit');
       expect(requests[0].splits[0].amount, 500.0);
     });
+
+    test('handles formatted amounts with currency symbols and negative values', () {
+      const csvData = '''
+Date,Description,Paid By,Amount
+2026-10-27,Coffee,Sanwi,₹150.00
+2026-10-27,Dinner,,"Rs. 1,200.50"
+2026-10-27,Refund,Amrit,-300.00
+2026-10-27,Adjustment,Sanwi,(450.00)
+''';
+      final rows = ImportService.parseContent(csvData);
+      expect(rows.length, 4);
+      expect(rows[0].amount, 150.0);
+      expect(rows[1].amount, 1200.50);
+      expect(rows[1].paidBy, 'You'); // Fallback for missing payer
+      expect(rows[2].amount, 300.0); // Negative converted to absolute
+      expect(rows[3].amount, 450.0); // Parentheses converted to absolute
+    });
   });
 }
