@@ -1,0 +1,64 @@
+# Environment & Secrets
+.env
+*.env
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+/build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Flutter / Dart
+client/.dart_tool/
+client/.flutter-plugins
+client/.flutter-plugins-dependencies
+client/.pub-cache/
+client/.pub/
+client/build/
+client/coverage/
+
+# Android build outputs & caches
+client/android/.gradle/
+client/android/build/
+client/android/app/build/
+client/android/local.properties
+**/android/.gradle/
+*.iml
+.idea/
+.vscode/
+
+# Ignore large debug APKs (exceeds 100MB GitHub limit)
+*debug*.apk
+*.debug.apk
+client/**/*.apk
+
+# Large zip archives & downloads
+*.zip
+*.tar.gz
+supabase/.temp/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.log
