@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/hardware/back_tap_channel.dart';
 import '../../core/services/import_service.dart';
@@ -464,7 +465,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                 ],
               ),
             ),
-            const SizedBox(height: 32),
+            const SizedBox(height: 24),
+
+            // ── About & Links ───────────────────────────────────────────────
+            Text(
+              'ABOUT & LINKS',
+              style: AppTypography.labelSm.copyWith(letterSpacing: 1.5, color: AppColors.outline),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: AppColors.surfaceContainerLow,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  _buildLinkTile(
+                    icon: Icons.code,
+                    label: 'GitHub Repository',
+                    subtitle: 'github.com/amroot141/WiSplit',
+                    url: 'https://github.com/amroot141/WiSplit',
+                    isFirst: true,
+                  ),
+                  Divider(height: 1, indent: 56, color: AppColors.outlineVariant.withValues(alpha: 0.4)),
+                  _buildLinkTile(
+                    icon: Icons.download_rounded,
+                    label: 'Download Latest APK',
+                    subtitle: 'github.com/amroot141/WiSplit/releases',
+                    url: 'https://github.com/amroot141/WiSplit/releases/latest',
+                    isFirst: false,
+                  ),
+                  Divider(height: 1, indent: 56, color: AppColors.outlineVariant.withValues(alpha: 0.4)),
+                  _buildLinkTile(
+                    icon: Icons.bug_report_outlined,
+                    label: 'Report an Issue',
+                    subtitle: 'Open a bug report on GitHub',
+                    url: 'https://github.com/amroot141/WiSplit/issues/new',
+                    isFirst: false,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Center(
+              child: Text(
+                'WiSplit v1.0.0 · Open Source · MIT License',
+                style: AppTypography.labelSm.copyWith(color: AppColors.outline),
+              ),
+            ),
+            const SizedBox(height: 24),
 
             // ── Sign Out Button ─────────────────────────────────────────────
             SizedBox(
@@ -856,5 +905,60 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         );
       }
     }
+  }
+
+  Widget _buildLinkTile({
+    required IconData icon,
+    required String label,
+    required String subtitle,
+    required String url,
+    required bool isFirst,
+  }) {
+    return InkWell(
+      onTap: () async {
+        final uri = Uri.parse(url);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Could not open: $url')),
+          );
+        }
+      },
+      borderRadius: BorderRadius.vertical(
+        top: isFirst ? const Radius.circular(20) : Radius.zero,
+        bottom: const Radius.circular(0),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppColors.primaryContainer.withValues(alpha: 0.15),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: AppColors.primaryContainer, size: 18),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(label, style: AppTypography.bodyMd.copyWith(fontWeight: FontWeight.w600)),
+                  Text(
+                    subtitle,
+                    style: AppTypography.labelSm.copyWith(color: AppColors.outline),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.open_in_new, size: 16, color: AppColors.outline),
+          ],
+        ),
+      ),
+    );
   }
 }
