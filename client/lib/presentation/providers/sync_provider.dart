@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/database/sync_queue_service.dart';
 import '../../core/network/network_info.dart';
 import '../../data/services/auth_service.dart';
+import '../../data/services/cloud_sync_service.dart';
 import 'expense_provider.dart';
 import 'group_list_provider.dart';
 import 'personal_ledger_provider.dart';
@@ -99,6 +100,7 @@ class SyncStatusNotifier extends StateNotifier<SyncStatus> {
       // Cloud account synchronization for groups & expenses
       await AuthService().syncAccountDataToCloud();
       await AuthService().syncAccountDataFromCloud();
+      await CloudSyncService.instance.syncAllGroups();
 
       final count = await _syncQueue.getPendingCount();
       state = state.copyWith(

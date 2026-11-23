@@ -12,6 +12,7 @@ import '../../core/theme/app_typography.dart';
 import '../../data/models/expense_models.dart';
 import '../../data/models/group_model.dart';
 import '../../data/models/settlement_model.dart';
+import '../../data/services/cloud_sync_service.dart';
 import '../providers/expense_provider.dart';
 import '../providers/group_list_provider.dart';
 import '../widgets/add_expense_bottom_sheet.dart';
@@ -33,6 +34,14 @@ class GroupDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(groupExpenseNotifierProvider(widget.group.id).notifier).syncWithCloud();
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     final groupState = ref.watch(groupExpenseNotifierProvider(widget.group.id));
@@ -75,6 +84,17 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
       appBar: AppBar(
         title: Text(activeGroup.name, style: AppTypography.titleSm),
         actions: [
+          // Sync Group
+          IconButton(
+            icon: const Icon(Icons.sync, color: AppColors.primaryContainer),
+            tooltip: 'Sync with Cloud',
+            onPressed: () async {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(content: Text('Syncing group with cloud...'), duration: Duration(seconds: 1)),
+              );
+              await ref.read(groupExpenseNotifierProvider(widget.group.id).notifier).syncWithCloud();
+            },
+          ),
           // Add Member to Group
           IconButton(
             icon: const Icon(Icons.person_add_outlined, color: AppColors.primaryContainer),
@@ -101,9 +121,16 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
           ),
         ],
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-        child: Column(
+      body: RefreshIndicator(
+        color: AppColors.primaryContainer,
+        backgroundColor: AppColors.surfaceContainerHigh,
+        onRefresh: () async {
+          await ref.read(groupExpenseNotifierProvider(widget.group.id).notifier).syncWithCloud();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+          child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ── Group Spending & Net Balance Hero ───────────────────────────
@@ -273,7 +300,8 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
                     icon: const Icon(Icons.share, size: 18, color: AppColors.primaryContainer),
                     tooltip: 'Share Invite Link',
                     onPressed: () {
-                      final shareText = 'Join my group "${widget.group.name}" on WiSplit! Use Invite Code: $inviteCode. Download the app at https://github.com/amroot141/WiSplit/releases/latest';
+                      final token = CloudSyncService.encodeGroupToken(activeGroup);
+                      final shareText = 'Join my group "${activeGroup.name}" on WiSplit!\nInvite Code: $inviteCode\nJoin Token: $token\nDownload the app at https://github.com/amroot141/WiSplit/releases/latest';
                       Clipboard.setData(ClipboardData(text: shareText));
                       ScaffoldMessenger.of(context).showSnackBar(
                         const SnackBar(content: Text('Group invite link copied to clipboard!')),
@@ -553,8 +581,9 @@ class _GroupDetailScreenState extends ConsumerState<GroupDetailScreen> {
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   // ── Payment Dialog (UPI Intent or Settle) ──────────────────────────────────
   void _openPaymentDialog(BuildContext context, DebtSettlement settlement) {

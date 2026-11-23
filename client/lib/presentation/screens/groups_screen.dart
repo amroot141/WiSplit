@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
+import '../providers/auth_provider.dart';
 import '../providers/group_list_provider.dart';
 import '../widgets/create_group_bottom_sheet.dart';
 import 'group_detail_screen.dart';
@@ -36,13 +37,24 @@ class GroupsScreen extends ConsumerWidget {
           ),
         ],
       ),
-      body: groups.isEmpty
-          ? _buildEmptyState(context, ref)
-          : ListView.separated(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              itemCount: groups.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
-              itemBuilder: (context, index) {
+      body: RefreshIndicator(
+        color: AppColors.primaryContainer,
+        backgroundColor: AppColors.surfaceContainerHigh,
+        onRefresh: () => ref.read(groupListProvider.notifier).refreshGroupsFromCloud(),
+        child: groups.isEmpty
+            ? SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                child: SizedBox(
+                  height: MediaQuery.of(context).size.height * 0.7,
+                  child: _buildEmptyState(context, ref),
+                ),
+              )
+            : ListView.separated(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                itemCount: groups.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 12),
+                itemBuilder: (context, index) {
                 final group = groups[index];
                 final memberCount = group.members.length;
 
@@ -104,6 +116,7 @@ class GroupsScreen extends ConsumerWidget {
                 );
               },
             ),
+      ),
     );
   }
 
@@ -155,66 +168,105 @@ class GroupsScreen extends ConsumerWidget {
 
   void _showJoinGroupDialog(BuildContext context, WidgetRef ref) {
     final codeController = TextEditingController();
+    bool isJoining = false;
+    String? errorText;
 
     showDialog(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: AppColors.surfaceContainerLow,
-        title: Text('Join Group', style: AppTypography.titleSm),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Enter the 6-character group invite code shared by your friend.',
-              style: AppTypography.bodyMd.copyWith(color: AppColors.outline),
+      barrierDismissible: !isJoining,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          backgroundColor: AppColors.surfaceContainerLow,
+          title: Text('Join Group', style: AppTypography.titleSm),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Enter the group invite code (e.g. WS-8A9F) or token shared by your friend.',
+                style: AppTypography.bodyMd.copyWith(color: AppColors.outline),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: codeController,
+                textCapitalization: TextCapitalization.characters,
+                enabled: !isJoining,
+                style: AppTypography.bodyLg.copyWith(
+                  letterSpacing: 2.0,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.primaryContainer,
+                ),
+                decoration: InputDecoration(
+                  hintText: 'e.g. WS-8A9F',
+                  hintStyle: const TextStyle(letterSpacing: 0, color: AppColors.subtleGray),
+                  prefixIcon: const Icon(Icons.vpn_key_outlined, color: AppColors.outline),
+                  errorText: errorText,
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isJoining ? null : () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
             ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: codeController,
-              textCapitalization: TextCapitalization.characters,
-              style: AppTypography.bodyLg.copyWith(
-                letterSpacing: 2.0,
-                fontWeight: FontWeight.w700,
-                color: AppColors.primaryContainer,
-              ),
-              decoration: const InputDecoration(
-                hintText: 'e.g. WS-8A9F',
-                hintStyle: TextStyle(letterSpacing: 0, color: AppColors.subtleGray),
-                prefixIcon: Icon(Icons.vpn_key_outlined, color: AppColors.outline),
-              ),
+            ElevatedButton(
+              onPressed: isJoining
+                  ? null
+                  : () async {
+                      final code = codeController.text.trim();
+                      if (code.isEmpty) return;
+
+                      setState(() {
+                        isJoining = true;
+                        errorText = null;
+                      });
+
+                      final session = ref.read(userSessionProvider).value;
+                      final memberName = session?.fullName.isNotEmpty == true
+                          ? session!.fullName
+                          : 'You';
+
+                      final joined = await ref
+                          .read(groupListProvider.notifier)
+                          .joinGroupByInviteCode(
+                            code: code,
+                            memberName: memberName,
+                            currentUserId: currentUserId,
+                          );
+
+                      if (!ctx.mounted) return;
+
+                      if (joined != null) {
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Successfully joined "${joined.name}"!')),
+                        );
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => GroupDetailScreen(
+                              group: joined,
+                              currentUserId: currentUserId,
+                            ),
+                          ),
+                        );
+                      } else {
+                        setState(() {
+                          isJoining = false;
+                          errorText = 'Group not found for code "$code". Check and try again.';
+                        });
+                      }
+                    },
+              child: isJoining
+                  ? const SizedBox(
+                      height: 18,
+                      width: 18,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Text('Join Group'),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final code = codeController.text.trim().toUpperCase();
-              if (code.isEmpty) return;
-
-              Navigator.of(ctx).pop();
-
-              await ref.read(groupListProvider.notifier).createGroup(
-                    name: 'Group ($code)',
-                    description: 'Joined via invite code $code',
-                    currency: 'INR',
-                    createdBy: currentUserId,
-                    members: [currentUserId],
-                  );
-
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Successfully joined group with code $code!')),
-                );
-              }
-            },
-            child: const Text('Join Group'),
-          ),
-        ],
       ),
     );
   }

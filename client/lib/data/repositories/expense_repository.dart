@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:sqflite/sqflite.dart';
 import 'package:uuid/uuid.dart';
 
+import '../../core/algorithms/debt_simplifier.dart';
 import '../../core/database/local_database.dart';
 import '../../core/database/sync_queue_service.dart';
 import '../../core/network/network_info.dart';
@@ -9,6 +10,7 @@ import '../models/expense_models.dart';
 import '../models/settlement_model.dart';
 import '../services/auth_service.dart';
 import '../services/expense_api_service.dart';
+import 'group_repository.dart';
 
 abstract class ExpenseRepository {
   Future<Expense> createExpense(String groupId, CreateExpenseRequest request);
@@ -22,38 +24,22 @@ abstract class ExpenseRepository {
 }
 
 class ExpenseRepositoryImpl implements ExpenseRepository {
-  final ExpenseApiService _apiService;
   final LocalDatabase _localDb;
   final SyncQueueService _syncQueue;
-  final NetworkInfo _networkInfo;
   final Uuid _uuid;
 
   ExpenseRepositoryImpl({
-    ExpenseApiService? apiService,
     LocalDatabase? localDb,
     SyncQueueService? syncQueue,
+    ExpenseApiService? apiService,
     NetworkInfo? networkInfo,
-  })  : _apiService = apiService ?? ExpenseApiServiceImpl(),
-        _localDb = localDb ?? LocalDatabase.instance,
+  })  : _localDb = localDb ?? LocalDatabase.instance,
         _syncQueue = syncQueue ?? SyncQueueService(),
-        _networkInfo = networkInfo ?? NetworkInfoImpl(),
         _uuid = const Uuid();
 
   @override
   Future<Expense> createExpense(String groupId, CreateExpenseRequest request) async {
-    final isOnline = await _networkInfo.isConnected;
-
-    if (isOnline) {
-      try {
-        final serverExpense = await _apiService.createExpense(groupId, request);
-        await _cacheExpense(serverExpense, isSynced: true);
-        return serverExpense;
-      } catch (_) {
-        // Network dropped during request, fallback to offline queue
-      }
-    }
-
-    // Offline flow: Create locally, store in SQLite, and enqueue for sync
+    // Instant offline-first creation: write directly to SQLite with zero network latency
     final tempId = 'temp_${_uuid.v4()}';
     final expenseTimestamp = request.createdAt?.toUtc() ?? DateTime.now().toUtc();
     final offlineExpense = Expense(
@@ -82,6 +68,8 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     );
 
     await _cacheExpense(offlineExpense, isSynced: true);
+    
+    // Background cloud backup (non-blocking)
     AuthService().syncAccountDataToCloud();
 
     return offlineExpense;
@@ -214,7 +202,13 @@ class ExpenseRepositoryImpl implements ExpenseRepository {
     String groupId, {
     String currency = 'USD',
   }) async {
-    return await _apiService.fetchSettlements(groupId, currency: currency);
+    final expenses = await getCachedGroupExpenses(groupId);
+    final group = await GroupRepository().getGroupById(groupId);
+    final members = group?.members ?? [];
+    return DebtSimplifier.calculateSimplifiedDebts(
+      expenses: expenses,
+      allMembers: members,
+    );
   }
 
   @override

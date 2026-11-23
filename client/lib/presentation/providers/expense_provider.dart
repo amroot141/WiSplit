@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../data/models/expense_models.dart';
 import '../../data/models/settlement_model.dart';
 import '../../data/repositories/expense_repository.dart';
+import '../../data/services/cloud_sync_service.dart';
+import 'group_list_provider.dart';
 
 final expenseRepositoryProvider = Provider<ExpenseRepository>((ref) {
   return ExpenseRepositoryImpl();
@@ -62,12 +64,27 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
     try {
       final cached = await _repository.getCachedGroupExpenses(_groupId);
       state = state.copyWith(expenses: cached, isLoading: false);
+      // Background sync with cloud to discover expenses from other members
+      syncWithCloud();
     } catch (e) {
       state = state.copyWith(
         isLoading: false,
         errorMessage: 'Failed to load cached expenses: ${e.toString()}',
       );
     }
+  }
+
+  /// Synchronizes group expenses and members with Supabase cloud
+  Future<void> syncWithCloud() async {
+    try {
+      final changed = await CloudSyncService.instance.syncGroup(_groupId);
+      if (changed) {
+        final cached = await _repository.getCachedGroupExpenses(_groupId);
+        state = state.copyWith(expenses: cached);
+        _ref?.read(allExpensesProvider.notifier).loadAllExpenses();
+        _ref?.read(groupListProvider.notifier).loadGroups();
+      }
+    } catch (_) {}
   }
 
   /// Creates a new group expense (queues offline if disconnected)
@@ -78,6 +95,8 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
       final updatedList = [created, ...state.expenses];
       state = state.copyWith(expenses: updatedList, isLoading: false);
       _ref?.read(allExpensesProvider.notifier).loadAllExpenses();
+      // Publish to cloud so other group members receive it
+      CloudSyncService.instance.publishExpense(_groupId, created);
       return created;
     } catch (e) {
       state = state.copyWith(
@@ -134,6 +153,7 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpensesState> {
       final updatedList = state.expenses.map((e) => e.id == expenseId ? updated : e).toList();
       state = state.copyWith(expenses: updatedList, isLoading: false);
       _ref?.read(allExpensesProvider.notifier).loadAllExpenses();
+      CloudSyncService.instance.publishExpense(_groupId, updated);
       return updated;
     } catch (e) {
       state = state.copyWith(

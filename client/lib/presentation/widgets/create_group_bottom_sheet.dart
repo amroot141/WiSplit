@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_typography.dart';
+import '../providers/auth_provider.dart';
 import '../providers/group_list_provider.dart';
 
 Future<void> showCreateGroupBottomSheet(
@@ -191,11 +192,18 @@ class _CreateGroupBottomSheetContentState
     setState(() => _isSaving = true);
 
     try {
+      final allMembers = List<String>.from(_members);
+      final session = ref.read(userSessionProvider).value;
+      final creatorName = session?.fullName.isNotEmpty == true ? session!.fullName : 'You';
+      if (!allMembers.contains(creatorName) && !allMembers.contains(widget.currentUserId) && !allMembers.contains('You')) {
+        allMembers.insert(0, creatorName);
+      }
+
       await ref.read(groupListProvider.notifier).createGroup(
             name: name,
             description: desc,
             createdBy: widget.currentUserId,
-            members: _members,
+            members: allMembers,
           );
 
       if (mounted) {

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:http/http.dart' as http;
@@ -31,11 +32,7 @@ class ApiClient {
   static String _defaultBaseUrl() {
     const customUrl = String.fromEnvironment('API_BASE_URL');
     if (customUrl.isNotEmpty) return customUrl;
-    if (Platform.isAndroid) {
-      // Host machine Wi-Fi IP for physical Android device
-      return 'http://10.0.32.126:8000';
-    }
-    return 'http://localhost:8000';
+    return '';
   }
 
   void setAuthToken(String? token) {
@@ -54,26 +51,40 @@ class ApiClient {
   }
 
   Future<dynamic> get(String path, {Map<String, String>? queryParams}) async {
+    if (baseUrl.isEmpty) {
+      throw const ApiException(statusCode: 0, message: 'No API base URL configured');
+    }
     final uri = Uri.parse('$baseUrl$path').replace(queryParameters: queryParams);
     try {
-      final response = await _httpClient.get(uri, headers: _headers());
+      final response = await _httpClient
+          .get(uri, headers: _headers())
+          .timeout(const Duration(seconds: 4));
       return _processResponse(response);
     } on SocketException catch (e) {
       throw ApiException(statusCode: 0, message: 'Network unreachable: ${e.message}');
+    } on TimeoutException {
+      throw const ApiException(statusCode: 408, message: 'Request timed out');
     }
   }
 
   Future<dynamic> post(String path, {dynamic body}) async {
+    if (baseUrl.isEmpty) {
+      throw const ApiException(statusCode: 0, message: 'No API base URL configured');
+    }
     final uri = Uri.parse('$baseUrl$path');
     try {
-      final response = await _httpClient.post(
-        uri,
-        headers: _headers(),
-        body: body != null ? jsonEncode(body) : null,
-      );
+      final response = await _httpClient
+          .post(
+            uri,
+            headers: _headers(),
+            body: body != null ? jsonEncode(body) : null,
+          )
+          .timeout(const Duration(seconds: 4));
       return _processResponse(response);
     } on SocketException catch (e) {
       throw ApiException(statusCode: 0, message: 'Network unreachable: ${e.message}');
+    } on TimeoutException {
+      throw const ApiException(statusCode: 408, message: 'Request timed out');
     }
   }
 

@@ -5,7 +5,7 @@
 [![Flutter](https://img.shields.io/badge/Flutter-3.29.0-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.110+-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com)
-[![Platform](https://img.shields.io/badge/Platform-Android%20%7C%20iOS%20%7C%20Web-black)](https://github.com/amroot141/WiSplit)
+[![Platform](https://img.shields.io/badge/Platform-Android-black)](https://github.com/amroot141/WiSplit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Latest Release](https://img.shields.io/github/v/release/amroot141/WiSplit?style=for-the-badge&logo=android&logoColor=black&color=BFA2FA&label=Download%20APK)](https://github.com/amroot141/WiSplit/releases/latest/download/WiSplit-release.apk)
 

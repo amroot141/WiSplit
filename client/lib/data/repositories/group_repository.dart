@@ -3,9 +3,13 @@ import 'package:sqflite/sqflite.dart';
 import '../../core/database/local_database.dart';
 import '../models/group_model.dart';
 import '../services/auth_service.dart';
+import '../services/cloud_sync_service.dart';
 
 class GroupRepository {
-  GroupRepository();
+  final CloudSyncService _cloudSync;
+
+  GroupRepository({CloudSyncService? cloudSync})
+      : _cloudSync = cloudSync ?? CloudSyncService.instance;
 
   Future<List<GroupModel>> getAllGroups() async {
     final db = await LocalDatabase.instance.database;
@@ -48,8 +52,31 @@ class GroupRepository {
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
 
+    // Publish to cloud so invite codes and sync work for other members
+    _cloudSync.publishGroup(group);
+
     // Backup to account cloud storage
     AuthService().syncAccountDataToCloud();
+  }
+
+  Future<GroupModel?> joinGroupByInviteCode({
+    required String code,
+    required String memberName,
+    required String currentUserId,
+  }) async {
+    return await _cloudSync.joinGroupWithCode(
+      inviteCode: code,
+      newMemberName: memberName,
+      currentUserId: currentUserId,
+    );
+  }
+
+  Future<bool> syncGroup(String groupId) async {
+    return await _cloudSync.syncGroup(groupId);
+  }
+
+  Future<void> syncAllGroups() async {
+    await _cloudSync.syncAllGroups();
   }
 
   Future<void> deleteGroup(String groupId) async {

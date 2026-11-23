@@ -65,6 +65,36 @@ class GroupListNotifier extends StateNotifier<List<GroupModel>> {
     updatedList[groupIndex] = updatedGroup;
     state = updatedList;
   }
+
+  Future<GroupModel?> joinGroupByInviteCode({
+    required String code,
+    required String memberName,
+    required String currentUserId,
+  }) async {
+    final joined = await _repository.joinGroupByInviteCode(
+      code: code,
+      memberName: memberName,
+      currentUserId: currentUserId,
+    );
+
+    if (joined != null) {
+      final existingIndex = state.indexWhere((g) => g.id == joined.id);
+      if (existingIndex >= 0) {
+        final updatedList = List<GroupModel>.from(state);
+        updatedList[existingIndex] = joined;
+        state = updatedList;
+      } else {
+        state = [joined, ...state];
+      }
+    }
+    return joined;
+  }
+
+  Future<void> refreshGroupsFromCloud() async {
+    await _repository.syncAllGroups();
+    final groups = await _repository.getAllGroups();
+    state = groups;
+  }
 }
 
 final groupListProvider =
